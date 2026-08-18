@@ -1,0 +1,17 @@
+../Core/Src/comm.c:107:20:put_be	2
+../Core/Src/comm.c:118:6:dcm_poll	5
+../Core/Src/comm.c:141:13:tlm_build	4
+../Core/Src/comm.c:191:13:tlm_port_release	2
+../Core/Src/comm.c:199:13:tlm_tx_start	4
+../Core/Src/comm.c:214:13:tlm_dispatch	5
+../Core/Src/comm.c:242:6:HAL_UART_TxCpltCallback	3
+../Core/Src/comm.c:256:6:HAL_UART_ErrorCallback	5
+../Core/Src/comm.c:290:6:Comm_RxStart	3
+../Core/Src/comm.c:308:24:rx_head	17
+../Core/Src/comm.c:315:13:rx_exec	4
+../Core/Src/comm.c:346:13:rx_feed	9
+../Core/Src/comm.c:378:6:Comm_RxPoll	4
+../Core/Src/comm.c:405:6:Comm_Init	3
+../Core/Src/comm.c:437:6:Comm_OnTick	2
+../Core/Src/comm.c:444:6:Comm_Poll	2
+../Core/Src/comm.c:460:6:Comm_TxWatchdog	4

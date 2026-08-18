@@ -1,0 +1,17 @@
+../Core/Src/comm.c:107:20:put_be	40	static
+../Core/Src/comm.c:118:6:dcm_poll	16	static
+../Core/Src/comm.c:141:13:tlm_build	80	static
+../Core/Src/comm.c:191:13:tlm_port_release	16	static
+../Core/Src/comm.c:199:13:tlm_tx_start	24	static,ignoring_inline_asm
+../Core/Src/comm.c:214:13:tlm_dispatch	24	static
+../Core/Src/comm.c:242:6:HAL_UART_TxCpltCallback	24	static
+../Core/Src/comm.c:256:6:HAL_UART_ErrorCallback	24	static
+../Core/Src/comm.c:290:6:Comm_RxStart	16	static
+../Core/Src/comm.c:308:24:rx_head	16	static
+../Core/Src/comm.c:315:13:rx_exec	24	static
+../Core/Src/comm.c:346:13:rx_feed	24	static
+../Core/Src/comm.c:378:6:Comm_RxPoll	16	static
+../Core/Src/comm.c:405:6:Comm_Init	16	static
+../Core/Src/comm.c:437:6:Comm_OnTick	8	static
+../Core/Src/comm.c:444:6:Comm_Poll	16	static
+../Core/Src/comm.c:460:6:Comm_TxWatchdog	24	static

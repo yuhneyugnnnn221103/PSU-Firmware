@@ -1,0 +1,3 @@
+D:\Qt\Tools\CMake_64\bin\cmake.exe -E rm -f CMakeFiles\PSU_UI.dir/objects.a
+D:\Qt\Tools\mingw1310_64\bin\ar.exe qc CMakeFiles\PSU_UI.dir/objects.a @CMakeFiles\PSU_UI.dir\objects1.rsp
+D:\Qt\Tools\mingw1310_64\bin\g++.exe -g -mwindows -Wl,--whole-archive CMakeFiles\PSU_UI.dir/objects.a -Wl,--no-whole-archive -o PSU_UI.exe -Wl,--out-implib,libPSU_UI.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\PSU_UI.dir\linkLibs.rsp
