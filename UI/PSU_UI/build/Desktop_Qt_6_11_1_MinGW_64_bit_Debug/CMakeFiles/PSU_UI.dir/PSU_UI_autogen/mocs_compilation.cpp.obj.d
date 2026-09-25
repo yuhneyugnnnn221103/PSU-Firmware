@@ -366,8 +366,34 @@ CMakeFiles/PSU_UI.dir/PSU_UI_autogen/mocs_compilation.cpp.obj: \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qelapsedtimer.h \
  D:/AESA/PSU/code/UI/PSU_UI/ina228_data.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/QtGlobal \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/QDateTime \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qdatetime.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qcalendar.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qlocale.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qvariant.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qdebug.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qcontiguouscache.h \
+ D:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/climits \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qsharedpointer.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qshareddata.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qsharedpointer_impl.h \
+ D:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/set \
+ D:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/bits/stl_set.h \
+ D:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/bits/stl_multiset.h \
+ D:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/unordered_set \
+ D:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/bits/unordered_set.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qmap.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qshareddata_impl.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qset.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qhash.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qvarlengtharray.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qalloc.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/q23utility.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/q20utility.h \
  D:/AESA/PSU/code/UI/PSU_UI/protocol.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/QByteArray \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/QString \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/QStringList \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qtmochelpers.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qtmocconstants.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/q20algorithm.h \
@@ -385,8 +411,6 @@ CMakeFiles/PSU_UI.dir/PSU_UI_autogen/mocs_compilation.cpp.obj: \
  D:/Qt/6.11.1/mingw_64/include/QtGui/qwindowdefs_win.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qmargins.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qcheckedint_impl.h \
- D:/Qt/6.11.1/mingw_64/include/QtCore/q23utility.h \
- D:/Qt/6.11.1/mingw_64/include/QtCore/q20utility.h \
  D:/Qt/6.11.1/mingw_64/include/QtGui/qaction.h \
  D:/Qt/6.11.1/mingw_64/include/QtGui/qkeysequence.h \
  D:/Qt/6.11.1/mingw_64/include/QtGui/qicon.h \
@@ -398,30 +422,12 @@ CMakeFiles/PSU_UI.dir/PSU_UI_autogen/mocs_compilation.cpp.obj: \
  D:/Qt/6.11.1/mingw_64/include/QtGui/qcolor.h \
  D:/Qt/6.11.1/mingw_64/include/QtGui/qrgb.h \
  D:/Qt/6.11.1/mingw_64/include/QtGui/qrgba64.h \
- D:/Qt/6.11.1/mingw_64/include/QtCore/qshareddata.h \
  D:/Qt/6.11.1/mingw_64/include/QtGui/qimage.h \
  D:/Qt/6.11.1/mingw_64/include/QtGui/qpixelformat.h \
  D:/Qt/6.11.1/mingw_64/include/QtGui/qtransform.h \
  D:/Qt/6.11.1/mingw_64/include/QtGui/qpolygon.h \
  D:/Qt/6.11.1/mingw_64/include/QtGui/qregion.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qline.h \
- D:/Qt/6.11.1/mingw_64/include/QtCore/qvariant.h \
- D:/Qt/6.11.1/mingw_64/include/QtCore/qdebug.h \
- D:/Qt/6.11.1/mingw_64/include/QtCore/qcontiguouscache.h \
- D:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/climits \
- D:/Qt/6.11.1/mingw_64/include/QtCore/qsharedpointer.h \
- D:/Qt/6.11.1/mingw_64/include/QtCore/qsharedpointer_impl.h \
- D:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/set \
- D:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/bits/stl_set.h \
- D:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/bits/stl_multiset.h \
- D:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/unordered_set \
- D:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/bits/unordered_set.h \
- D:/Qt/6.11.1/mingw_64/include/QtCore/qmap.h \
- D:/Qt/6.11.1/mingw_64/include/QtCore/qshareddata_impl.h \
- D:/Qt/6.11.1/mingw_64/include/QtCore/qset.h \
- D:/Qt/6.11.1/mingw_64/include/QtCore/qhash.h \
- D:/Qt/6.11.1/mingw_64/include/QtCore/qvarlengtharray.h \
- D:/Qt/6.11.1/mingw_64/include/QtCore/qalloc.h \
  D:/Qt/6.11.1/mingw_64/include/QtGui/qpalette.h \
  D:/Qt/6.11.1/mingw_64/include/QtGui/qbrush.h \
  D:/Qt/6.11.1/mingw_64/include/QtGui/qfont.h \
@@ -460,7 +466,6 @@ CMakeFiles/PSU_UI.dir/PSU_UI_autogen/mocs_compilation.cpp.obj: \
  D:/Qt/6.11.1/mingw_64/include/QtSerialPort/qserialportglobal.h \
  D:/Qt/6.11.1/mingw_64/include/QtSerialPort/qtserialportexports.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/QPair \
- D:/Qt/6.11.1/mingw_64/include/QtCore/QString \
  D:/AESA/PSU/code/UI/PSU_UI/ina228_widget.h \
  D:/AESA/PSU/code/UI/PSU_UI/custom_plot.h \
  D:/AESA/PSU/code/UI/PSU_UI/csv_logger.h \

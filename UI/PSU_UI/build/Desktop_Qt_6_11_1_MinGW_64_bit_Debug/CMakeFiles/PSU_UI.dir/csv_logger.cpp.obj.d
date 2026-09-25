@@ -365,8 +365,6 @@ CMakeFiles/PSU_UI.dir/csv_logger.cpp.obj: \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qelapsedtimer.h \
  D:\AESA\PSU\code\UI\PSU_UI\ina228_data.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/QtGlobal \
- D:\AESA\PSU\code\UI\PSU_UI\protocol.h \
- D:/Qt/6.11.1/mingw_64/include/QtCore/QByteArray \
  D:/Qt/6.11.1/mingw_64/include/QtCore/QDateTime \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qdatetime.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qcalendar.h \
@@ -391,6 +389,10 @@ CMakeFiles/PSU_UI.dir/csv_logger.cpp.obj: \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qalloc.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/q23utility.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/q20utility.h \
+ D:\AESA\PSU\code\UI\PSU_UI\protocol.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/QByteArray \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/QString \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/QStringList \
  D:/Qt/6.11.1/mingw_64/include/QtCore/QFileInfo \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qfileinfo.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qtimezone.h \

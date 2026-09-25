@@ -15,12 +15,12 @@
  * đều đọc được, không phụ thuộc locale hệ thống của máy chạy ứng dụng.
  */
 
-class CSV_Logger : public QObject
+class Csv_Logger : public QObject
 {
     Q_OBJECT
 public:
-    explicit CSV_Logger(QObject *parent = nullptr);
-    ~CSV_Logger() override;
+    explicit Csv_Logger(QObject *parent = nullptr);
+    ~Csv_Logger() override;
 
     bool start(const QString &filePath);
     void stop();

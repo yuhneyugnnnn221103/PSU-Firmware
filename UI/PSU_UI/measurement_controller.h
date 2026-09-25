@@ -20,13 +20,17 @@ public:
     void closePort();
     bool isConnected() const;
 
-    /* Gửi lệnh bật/tắt nguồn mạch INA228 (CMD 0x88).
-     * Trả về false nếu cổng chưa mở hoặc ghi không hết khung. */
-    bool sendPowerControl(bool enable);
+    /* Lenh PC -> STM. Tra false neu cong chua mo hoac ghi khong het khung. */
+    bool sendPowerControl(bool enable);                       /* 0x88 */
+    bool sendSetLimits(quint8 channel,
+                       double sovlA, double bovlV, double buvlV);  /* 0x89 */
+    bool sendGetLimits(quint8 channel);                       /* 0x8C */
+    bool sendClearFault(quint8 channelMask);                  /* 0x8B */
 
     const MeasurementPacket &measurement() const { return m_measurement; }
     const Ina228Data        &inaData(int index) const;
     const SystemStatus      &systemStatus() const { return m_measurement.status; }
+    const StatusPacket      &safetyStatus() const { return m_safetyStatus; }
 
     quint64 rxFrames()    const { return m_rxFrames; }
     quint64 validFrames() const { return m_validFrames; }
@@ -42,10 +46,14 @@ signals:
     void communicationStatsChanged();
     void linkStaleChanged(bool stale);
     void powerCommandSent(bool enable);
+    void limitAckReceived(const LimitAck &ack);
+    void safetyStatusUpdated(const StatusPacket &status);
     void errorOccurred(const QString &message);
 
 private slots:
     void onPacketReceived(const MeasurementPacket &packet);
+    void onLimitAckReceived(const LimitAck &ack);
+    void onStatusReceived(const StatusPacket &status);
     void onSerialConnected();
     void onSerialDisconnected();
     void onSerialError(const QString &message);
@@ -54,6 +62,7 @@ private slots:
     void onWatchdogTick();
 
 private:
+    bool sendFrame(const QByteArray &frame, const QString &what);
     void setStale(bool stale);
     void resetStats();
 
@@ -62,6 +71,7 @@ private:
     Packet_Parser  m_packetParser;
 
     MeasurementPacket m_measurement;
+    StatusPacket      m_safetyStatus;
 
     quint64 m_rxFrames    = 0;
     quint64 m_validFrames = 0;

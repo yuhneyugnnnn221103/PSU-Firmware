@@ -43,6 +43,12 @@ template <> constexpr inline auto Packet_Parser::qt_create_metaobjectdata<qt_met
         "",
         "MeasurementPacket",
         "packet",
+        "limitAckReceived",
+        "LimitAck",
+        "ack",
+        "statusReceived",
+        "StatusPacket",
+        "status",
         "crcError",
         "frameError",
         "processData",
@@ -55,16 +61,24 @@ template <> constexpr inline auto Packet_Parser::qt_create_metaobjectdata<qt_met
         QtMocHelpers::SignalData<void(const MeasurementPacket &)>(1, 2, QMC::AccessPublic, QMetaType::Void, {{
             { 0x80000000 | 3, 4 },
         }}),
+        // Signal 'limitAckReceived'
+        QtMocHelpers::SignalData<void(const LimitAck &)>(5, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { 0x80000000 | 6, 7 },
+        }}),
+        // Signal 'statusReceived'
+        QtMocHelpers::SignalData<void(const StatusPacket &)>(8, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { 0x80000000 | 9, 10 },
+        }}),
         // Signal 'crcError'
-        QtMocHelpers::SignalData<void()>(5, 2, QMC::AccessPublic, QMetaType::Void),
+        QtMocHelpers::SignalData<void()>(11, 2, QMC::AccessPublic, QMetaType::Void),
         // Signal 'frameError'
-        QtMocHelpers::SignalData<void()>(6, 2, QMC::AccessPublic, QMetaType::Void),
+        QtMocHelpers::SignalData<void()>(12, 2, QMC::AccessPublic, QMetaType::Void),
         // Slot 'processData'
-        QtMocHelpers::SlotData<void(const QByteArray &)>(7, 2, QMC::AccessPublic, QMetaType::Void, {{
-            { QMetaType::QByteArray, 8 },
+        QtMocHelpers::SlotData<void(const QByteArray &)>(13, 2, QMC::AccessPublic, QMetaType::Void, {{
+            { QMetaType::QByteArray, 14 },
         }}),
         // Slot 'reset'
-        QtMocHelpers::SlotData<void()>(9, 2, QMC::AccessPublic, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(15, 2, QMC::AccessPublic, QMetaType::Void),
     };
     QtMocHelpers::UintData qt_properties {
     };
@@ -89,19 +103,25 @@ void Packet_Parser::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _i
     if (_c == QMetaObject::InvokeMetaMethod) {
         switch (_id) {
         case 0: _t->packetReceived((*reinterpret_cast<std::add_pointer_t<MeasurementPacket>>(_a[1]))); break;
-        case 1: _t->crcError(); break;
-        case 2: _t->frameError(); break;
-        case 3: _t->processData((*reinterpret_cast<std::add_pointer_t<QByteArray>>(_a[1]))); break;
-        case 4: _t->reset(); break;
+        case 1: _t->limitAckReceived((*reinterpret_cast<std::add_pointer_t<LimitAck>>(_a[1]))); break;
+        case 2: _t->statusReceived((*reinterpret_cast<std::add_pointer_t<StatusPacket>>(_a[1]))); break;
+        case 3: _t->crcError(); break;
+        case 4: _t->frameError(); break;
+        case 5: _t->processData((*reinterpret_cast<std::add_pointer_t<QByteArray>>(_a[1]))); break;
+        case 6: _t->reset(); break;
         default: ;
         }
     }
     if (_c == QMetaObject::IndexOfMethod) {
         if (QtMocHelpers::indexOfMethod<void (Packet_Parser::*)(const MeasurementPacket & )>(_a, &Packet_Parser::packetReceived, 0))
             return;
-        if (QtMocHelpers::indexOfMethod<void (Packet_Parser::*)()>(_a, &Packet_Parser::crcError, 1))
+        if (QtMocHelpers::indexOfMethod<void (Packet_Parser::*)(const LimitAck & )>(_a, &Packet_Parser::limitAckReceived, 1))
             return;
-        if (QtMocHelpers::indexOfMethod<void (Packet_Parser::*)()>(_a, &Packet_Parser::frameError, 2))
+        if (QtMocHelpers::indexOfMethod<void (Packet_Parser::*)(const StatusPacket & )>(_a, &Packet_Parser::statusReceived, 2))
+            return;
+        if (QtMocHelpers::indexOfMethod<void (Packet_Parser::*)()>(_a, &Packet_Parser::crcError, 3))
+            return;
+        if (QtMocHelpers::indexOfMethod<void (Packet_Parser::*)()>(_a, &Packet_Parser::frameError, 4))
             return;
     }
 }
@@ -125,14 +145,14 @@ int Packet_Parser::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 5)
+        if (_id < 7)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 5;
+        _id -= 7;
     }
     if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 5)
+        if (_id < 7)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 5;
+        _id -= 7;
     }
     return _id;
 }
@@ -144,14 +164,26 @@ void Packet_Parser::packetReceived(const MeasurementPacket & _t1)
 }
 
 // SIGNAL 1
-void Packet_Parser::crcError()
+void Packet_Parser::limitAckReceived(const LimitAck & _t1)
 {
-    QMetaObject::activate(this, &staticMetaObject, 1, nullptr);
+    QMetaObject::activate<void>(this, &staticMetaObject, 1, nullptr, _t1);
 }
 
 // SIGNAL 2
+void Packet_Parser::statusReceived(const StatusPacket & _t1)
+{
+    QMetaObject::activate<void>(this, &staticMetaObject, 2, nullptr, _t1);
+}
+
+// SIGNAL 3
+void Packet_Parser::crcError()
+{
+    QMetaObject::activate(this, &staticMetaObject, 3, nullptr);
+}
+
+// SIGNAL 4
 void Packet_Parser::frameError()
 {
-    QMetaObject::activate(this, &staticMetaObject, 2, nullptr);
+    QMetaObject::activate(this, &staticMetaObject, 4, nullptr);
 }
 QT_WARNING_POP

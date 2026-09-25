@@ -4,125 +4,181 @@
 #include "cfg_store.h"
 #include "iwdg_hw.h"
 
-#define BOOT_MAX_ATTEMPTS		3u
+#define BOOT_MAX_ATTEMPTS   3u
 
-typedef void (*app_entry_t)(void);
+/* Vung RAM hop le cho MSP ban dau cua app (_estack) */
+#define RAM_DTCM_START      0x20000000u
+#define RAM_DTCM_END        0x20020000u     /* 128 KB */
+#define RAM_AXI_START       0x24000000u
+#define RAM_AXI_END         0x24050000u     /* 320 KB */
 
-static bool slot_exceeded_attempts(ota_slot_t sl)
+typedef struct {
+    bool     has_rec;
+    uint32_t boot_count;
+    bool     confirmed;
+} slot_state_t;
+
+static slot_state_t read_state(ota_slot_t sl)
 {
-	cfg_boot_payload_t bp;
-	if (!CfgStore_ReadBoot(sl, &bp)) {
-		return false;
-	}
+    slot_state_t st = { false, 0u, false };
+    cfg_boot_payload_t bp;
 
-	return !bp.confirmed && (bp.boot_count >= BOOT_MAX_ATTEMPTS);
+    if (CfgStore_ReadBoot(sl, &bp)) {
+        st.has_rec    = true;
+        st.boot_count = bp.boot_count;
+        st.confirmed  = (bp.confirmed != 0u);
+    }
+    return st;
 }
 
-static bool slot_rejected(ota_slot_t sl)
+/* PC da ra lenh ROLLBACK khoi slot nay */
+static bool is_rejected(const slot_state_t *st)
 {
-	cfg_boot_payload_t bp;
-	return CfgStore_ReadBoot(sl, &bp) && (bp.boot_count == CFG_BOOT_COUNT_FORCE_FAIL);
+    return st->has_rec && (st->boot_count == CFG_BOOT_COUNT_FORCE_FAIL);
 }
 
+/* Anh CHUA confirm va da thu du so lan ma khong tu confirm duoc */
+static bool is_exhausted(const slot_state_t *st)
+{
+    return st->has_rec && !st->confirmed && (st->boot_count >= BOOT_MAX_ATTEMPTS);
+}
+
+/* Kiem 2 word dau cua vector table truoc khi tin tuong nhay vao */
+static bool vector_ok(ota_slot_t sl)
+{
+    const uint32_t base  = Ota_CodeBase(sl);
+    const uint32_t msp   = *(const volatile uint32_t *)(base + 0u);
+    const uint32_t entry = *(const volatile uint32_t *)(base + 4u);
+    const uint32_t lo    = base;
+    const uint32_t hi    = g_ota_slots[sl].base + OTA_SLOT_SIZE;
+
+    const bool msp_ok =
+        ((msp & 3u) == 0u) &&
+        (((msp > RAM_DTCM_START) && (msp <= RAM_DTCM_END)) ||
+         ((msp > RAM_AXI_START)  && (msp <= RAM_AXI_END)));
+
+    const bool entry_ok =
+        ((entry & 1u) != 0u) &&                     /* bit Thumb */
+        ((entry & ~1u) >= lo) && ((entry & ~1u) < hi);
+
+    return msp_ok && entry_ok;
+}
+
+/* Anh moi cai hon (install_seq) thang; bang nhau thi so version */
 static bool newer(ota_slot_t b, ota_slot_t a)
 {
-	const ota_image_header_t *ha = Ota_Header(a);
-	const ota_image_header_t *hb = Ota_Header(b);
+    const ota_image_header_t *ha = Ota_Header(a);
+    const ota_image_header_t *hb = Ota_Header(b);
 
-	if (hb->version != ha->version) return hb->version > ha->version;
-	return hb->install_seq > ha->install_seq;
+    if (hb->install_seq != ha->install_seq) return hb->install_seq > ha->install_seq;
+    return hb->version > ha->version;
 }
 
 static ota_slot_t pick(const bool cand[OTA_SLOT_COUNT])
 {
-	ota_slot_t best = OTA_SLOT_NONE;
+    ota_slot_t best = OTA_SLOT_NONE;
 
-	for (ota_slot_t sl = OTA_SLOT_A; sl < OTA_SLOT_COUNT; sl++) {
-		if (cand[sl] && (best = OTA_SLOT_NONE || newer(sl, best))) {
-			best = sl;
-		}
-	}
-
-	return best;
+    for (ota_slot_t sl = OTA_SLOT_A; sl < OTA_SLOT_COUNT; sl++) {
+        if (!cand[sl]) continue;
+        if ((best == OTA_SLOT_NONE) || newer(sl, best)) {
+            best = sl;
+        }
+    }
+    return best;
 }
 
 static ota_slot_t choose_slot(void)
 {
-	bool ok[OTA_SLOT_COUNT], cand[OTA_SLOT_COUNT];
+    bool         valid[OTA_SLOT_COUNT];
+    bool         cand[OTA_SLOT_COUNT];
+    slot_state_t st[OTA_SLOT_COUNT];
 
-	for (ota_slot_t sl = OTA_SLOT_A; sl < OTA_SLOT_COUNT; sl++) {
-		ok[sl] = Ota_SlotValid(sl);
-		cand[sl] = ok[sl] && (!slot_exceeded_attempts(sl));
+    for (ota_slot_t sl = OTA_SLOT_A; sl < OTA_SLOT_COUNT; sl++) {
+        valid[sl] = Ota_ImageValid(sl) && vector_ok(sl);   /* CRC32 toan anh */
+        IWDG_Refresh();
+        st[sl]   = read_state(sl);
+        cand[sl] = valid[sl] && !is_rejected(&st[sl]) && !is_exhausted(&st[sl]);
+    }
 
-		IWDG_Refresh();
-	}
+    /* Muc 1: ung vien binh thuong */
+    ota_slot_t best = pick(cand);
+    if (best != OTA_SLOT_NONE) return best;
 
-	ota_slot_t best = pick(cand);
+    /* Muc 2: ca 2 da het luot thu -> bo qua dem, van ton trong ROLLBACK */
+    for (ota_slot_t sl = OTA_SLOT_A; sl < OTA_SLOT_COUNT; sl++) {
+        cand[sl] = valid[sl] && !is_rejected(&st[sl]);
+    }
+    best = pick(cand);
+    if (best != OTA_SLOT_NONE) return best;
 
-//	if (best == OTA_SLOT_NONE) {
-//		for (ota_slot_t sl = OTA_SLOT_A; sl < OTA_SLOT_COUNT; sl++) {
-//			cand[sl] = ok[sl] && !slot_rejected(sl);
-//		}
-//		best = pick(cand);
-//	}
-
-	return best;
+    /* Muc 3: con anh nao dung CRC thi chay, con hon treo board */
+    return pick(valid);
 }
 
 static void jump_to_slot(ota_slot_t sl)
 {
-	const uint32_t base = Ota_CodeBase(sl);
-	const uint32_t msp	= *(volatile uint32_t *)(base + 0u);
-	const uint32_t entry = *(volatile uint32_t *)(base + 4u);
+    const uint32_t base  = Ota_CodeBase(sl);
+    const uint32_t msp   = *(const volatile uint32_t *)(base + 0u);
+    const uint32_t entry = *(const volatile uint32_t *)(base + 4u);
 
-	for (uint32_t i = 0; i < 8; i++) {
-		NVIC->ICER[i] = 0xFFFFFFFFu;
-		NVIC->ICPR[i] = 0xFFFFFFFFu;
-	}
+    /* DeInit khi ngat CON BAT: HAL_RCC_DeInit dung HAL_GetTick cho timeout */
+    HAL_RCC_DeInit();                 /* goi lai HAL_InitTick -> SysTick bat lai */
+    HAL_DeInit();
 
-	SysTick->CTRL = 0u;
-	SysTick->LOAD = 0u;
-	SysTick->VAL  = 0u;
+    __disable_irq();
 
-	HAL_MPU_Disable();
-	HAL_RCC_DeInit();
-	HAL_DeInit();
-	__disable_irq();
+    /* Tat SysTick SAU DeInit, neu khong se bi bat lai */
+    SysTick->CTRL = 0u;
+    SysTick->LOAD = 0u;
+    SysTick->VAL  = 0u;
+    SCB->ICSR     = SCB_ICSR_PENDSTCLR_Msk;
 
-	SCB->VTOR = base;
-	__set_MSP(msp);
-	__set_CONTROL(0u);
-	__DSB();
-	__ISB();
+    for (uint32_t i = 0; i < 8u; i++) {
+        NVIC->ICER[i] = 0xFFFFFFFFu;
+        NVIC->ICPR[i] = 0xFFFFFFFFu;
+    }
 
-	((app_entry_t)entry)();
+    HAL_MPU_Disable();
 
-	while (1) {}
+    SCB->VTOR = base;
+    __set_CONTROL(0u);
+    __DSB();
+    __ISB();
+
+    /* Doi MSP va nhay trong CUNG 1 khoi asm: o -O0, bien cuc bo 'entry'
+     * nam tren stack, doc lai sau khi doi MSP se ra rac. */
+    __asm volatile (
+        "msr msp, %0  \n"
+        "bx  %1       \n"
+        :: "r" (msp), "r" (entry) : "memory");
+
+    while (1) {}
 }
 
 static void fatal_no_valid_slot(void)
 {
-	__disable_irq();
-	while (1) {}
+    /* Khong reset lien tuc: reset cung khong tao ra anh hop le.
+     * Nhay LED nhanh de bao loi, van giu SWD truy cap duoc. */
+    while (1) {
+        HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+        HAL_Delay(50);
+        IWDG_Refresh();
+    }
 }
 
 void Boot_Run(void)
 {
-	CfgStore_Init();
-
-    for (uint8_t i = 0; i < 10u; i++) {
-        HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-        HAL_Delay(100);
-    }
+    CfgStore_Init();
 
     const ota_slot_t sl = choose_slot();
-
     if (sl == OTA_SLOT_NONE) fatal_no_valid_slot();
 
-    cfg_boot_payload_t cur;
-    const uint32_t prev = CfgStore_ReadBoot(sl, &cur) ? cur.boot_count : 0u;
-    const uint32_t next = (prev == CFG_BOOT_COUNT_FORCE_FAIL) ? prev : (prev + 1);
-    (void)CfgStore_WriteBoot(sl, next, 0u);
+    /* CHI dem luot thu cho anh chua confirm. Anh da confirm khong bao
+     * gio bi ha cap vi reset (watchdog, mat dien, tat/bat nhanh). */
+    const slot_state_t st = read_state(sl);
+    if (!st.confirmed && (st.boot_count != CFG_BOOT_COUNT_FORCE_FAIL)) {
+        (void)CfgStore_WriteBoot(sl, st.boot_count + 1u, 0u);
+    }
 
     IWDG_Refresh();
     jump_to_slot(sl);

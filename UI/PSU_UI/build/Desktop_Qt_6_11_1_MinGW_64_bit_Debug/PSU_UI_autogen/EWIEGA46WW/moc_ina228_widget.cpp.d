@@ -3,6 +3,9 @@ D:/AESA/PSU/code/UI/PSU_UI/build/Desktop_Qt_6_11_1_MinGW_64_bit_Debug/PSU_UI_aut
   D:/AESA/PSU/code/UI/PSU_UI/ina228_data.h \
   D:/AESA/PSU/code/UI/PSU_UI/protocol.h \
   D:/Qt/6.11.1/mingw_64/include/QtCore/QByteArray \
+  D:/Qt/6.11.1/mingw_64/include/QtCore/QDateTime \
+  D:/Qt/6.11.1/mingw_64/include/QtCore/QString \
+  D:/Qt/6.11.1/mingw_64/include/QtCore/QStringList \
   D:/Qt/6.11.1/mingw_64/include/QtCore/QtGlobal \
   D:/Qt/6.11.1/mingw_64/include/QtCore/q17memory.h \
   D:/Qt/6.11.1/mingw_64/include/QtCore/q20bit.h \
@@ -28,6 +31,7 @@ D:/AESA/PSU/code/UI/PSU_UI/build/Desktop_Qt_6_11_1_MinGW_64_bit_Debug/PSU_UI_aut
   D:/Qt/6.11.1/mingw_64/include/QtCore/qbytearrayalgorithms.h \
   D:/Qt/6.11.1/mingw_64/include/QtCore/qbytearraylist.h \
   D:/Qt/6.11.1/mingw_64/include/QtCore/qbytearrayview.h \
+  D:/Qt/6.11.1/mingw_64/include/QtCore/qcalendar.h \
   D:/Qt/6.11.1/mingw_64/include/QtCore/qchar.h \
   D:/Qt/6.11.1/mingw_64/include/QtCore/qcheckedint_impl.h \
   D:/Qt/6.11.1/mingw_64/include/QtCore/qcompare.h \
@@ -42,6 +46,7 @@ D:/AESA/PSU/code/UI/PSU_UI/build/Desktop_Qt_6_11_1_MinGW_64_bit_Debug/PSU_UI_aut
   D:/Qt/6.11.1/mingw_64/include/QtCore/qcontiguouscache.h \
   D:/Qt/6.11.1/mingw_64/include/QtCore/qdarwinhelpers.h \
   D:/Qt/6.11.1/mingw_64/include/QtCore/qdatastream.h \
+  D:/Qt/6.11.1/mingw_64/include/QtCore/qdatetime.h \
   D:/Qt/6.11.1/mingw_64/include/QtCore/qdebug.h \
   D:/Qt/6.11.1/mingw_64/include/QtCore/qendian.h \
   D:/Qt/6.11.1/mingw_64/include/QtCore/qexceptionhandling.h \
@@ -61,6 +66,7 @@ D:/AESA/PSU/code/UI/PSU_UI/build/Desktop_Qt_6_11_1_MinGW_64_bit_Debug/PSU_UI_aut
   D:/Qt/6.11.1/mingw_64/include/QtCore/qlatin1stringview.h \
   D:/Qt/6.11.1/mingw_64/include/QtCore/qline.h \
   D:/Qt/6.11.1/mingw_64/include/QtCore/qlist.h \
+  D:/Qt/6.11.1/mingw_64/include/QtCore/qlocale.h \
   D:/Qt/6.11.1/mingw_64/include/QtCore/qlogging.h \
   D:/Qt/6.11.1/mingw_64/include/QtCore/qmalloc.h \
   D:/Qt/6.11.1/mingw_64/include/QtCore/qmap.h \

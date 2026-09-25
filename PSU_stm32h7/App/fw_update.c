@@ -255,6 +255,12 @@ uint8_t FwUpdate_End(uint32_t *out_info)
         return TLM_FW_ACK_CRC_FAIL;
     }
 
+	if (!Ota_ImageValid(target_slot())) {
+		s.state = FWU_IDLE;
+		if (out_info) *out_info = Crc32_Compute((const uint8_t *)Ota_CodeBase(target_slot()), s.declared_size);
+		return TLM_FW_ACK_CRC_FAIL;
+	}
+
     s.state = FWU_VERIFIED;
 
     {
@@ -275,9 +281,6 @@ bool FwUpdate_CanCommit(void)
 
 void FwUpdate_Commit(void)
 {
-    /* KHONG reset ngay - chi dat co, FwUpdate_Task() se reset sau
-     * FWU_COMMIT_DELAY_MS de dam bao khung FW_ACK(COMMIT) da duoc UART
-     * DMA day het ra day truoc khi CPU (va ca ngoai vi UART) bi cat. */
     s.commit_pending = true;
     s.commit_at_ms    = HAL_GetTick() + FWU_COMMIT_DELAY_MS;
 }
@@ -286,13 +289,9 @@ void FwUpdate_Task(uint32_t now_ms)
 {
     if (s.commit_pending) {
         if ((int32_t)(now_ms - s.commit_at_ms) >= 0) {
-            /* Khong lam gi voi Safety/PWR_EN o day - da bat buoc SAFE_OFF
-             * tu luc FW_BEGIN, PWR_EN van dang duoc safety.c giu muc TAT
-             * lien tuc trong SAFE_OFF. Bootloader se tu doc 2 header slot
-             * va chon slot version lon hon trong lan boot toi. */
             NVIC_SystemReset();
         }
-        return;    /* khong lam gi khac trong luc cho commit */
+        return;
     }
 
     if (s.state == FWU_RECEIVING || s.state == FWU_VERIFIED) {

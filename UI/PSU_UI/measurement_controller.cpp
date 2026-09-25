@@ -9,6 +9,12 @@ Measurement_Controller::Measurement_Controller(QObject *parent)
     connect(&m_packetParser,  &Packet_Parser::packetReceived,
             this,             &Measurement_Controller::onPacketReceived);
 
+    connect(&m_packetParser,  &Packet_Parser::limitAckReceived,
+            this,             &Measurement_Controller::onLimitAckReceived);
+
+    connect(&m_packetParser,  &Packet_Parser::statusReceived,
+            this,             &Measurement_Controller::onStatusReceived);
+
     connect(&m_serialManager, &Serial_Manager::connected,
             this,             &Measurement_Controller::onSerialConnected);
 
@@ -51,7 +57,7 @@ bool Measurement_Controller::isConnected() const
     return m_serialManager.isOpen();
 }
 
-bool Measurement_Controller::sendPowerControl(bool enable)
+bool Measurement_Controller::sendFrame(const QByteArray &frame, const QString &what)
 {
     if (!m_serialManager.isOpen())
     {
@@ -59,25 +65,61 @@ bool Measurement_Controller::sendPowerControl(bool enable)
         return false;
     }
 
-    const QByteArray frame = Protocol::buildPowerControlFrame(enable);
-
-    const qint64 written = m_serialManager.write(frame);
-
-    if (written != frame.size())
+    if (m_serialManager.write(frame) != frame.size())
     {
-        emit errorOccurred(tr("Failed to send power command"));
+        emit errorOccurred(tr("Failed to send %1").arg(what));
         return false;
     }
 
+    return true;
+}
+
+bool Measurement_Controller::sendPowerControl(bool enable)
+{
+    if (!sendFrame(Protocol::buildPowerControlFrame(enable),
+                   tr("power command")))
+        return false;
+
     emit powerCommandSent(enable);
     return true;
+}
+
+bool Measurement_Controller::sendSetLimits(quint8 channel,
+                                           double sovlA, double bovlV, double buvlV)
+{
+    return sendFrame(
+        Protocol::buildSetLimitFrame(channel, sovlA, bovlV, buvlV),
+        tr("limit command"));
+}
+
+bool Measurement_Controller::sendGetLimits(quint8 channel)
+{
+    return sendFrame(Protocol::buildGetLimitFrame(channel),
+                     tr("read-limit command"));
+}
+
+bool Measurement_Controller::sendClearFault(quint8 channelMask)
+{
+    return sendFrame(Protocol::buildClearFaultFrame(channelMask),
+                     tr("clear-fault command"));
+}
+
+void Measurement_Controller::onLimitAckReceived(const LimitAck &ack)
+{
+    emit limitAckReceived(ack);
+}
+
+void Measurement_Controller::onStatusReceived(const StatusPacket &status)
+{
+    m_safetyStatus = status;
+    emit safetyStatusUpdated(m_safetyStatus);
 }
 
 const Ina228Data &Measurement_Controller::inaData(int index) const
 {
     static const Ina228Data invalidData{};
 
-    if (index < 0 || index >= 4)
+    if (index < 0 || index >= Protocol::IC_COUNT)
         return invalidData;
 
     return m_measurement.ic[index];
@@ -93,10 +135,12 @@ void Measurement_Controller::resetStats()
     m_framesAtLastTick = 0;
     m_frameRateHz      = 0.0;
     m_measurement      = MeasurementPacket{};
+    m_safetyStatus     = StatusPacket{};
 
     emit communicationStatsChanged();
     emit measurementUpdated(m_measurement);
     emit systemStatusUpdated(m_measurement.status);
+    emit safetyStatusUpdated(m_safetyStatus);
 }
 
 void Measurement_Controller::onPacketReceived(const MeasurementPacket &packet)

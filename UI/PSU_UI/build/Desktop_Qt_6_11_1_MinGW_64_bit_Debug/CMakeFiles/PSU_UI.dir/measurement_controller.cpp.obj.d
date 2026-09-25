@@ -332,8 +332,35 @@ CMakeFiles/PSU_UI.dir/measurement_controller.cpp.obj: \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qelapsedtimer.h \
  D:\AESA\PSU\code\UI\PSU_UI\ina228_data.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/QtGlobal \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/QDateTime \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qdatetime.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qcalendar.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qlocale.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qvariant.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qdebug.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qtextstream.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qcontiguouscache.h \
+ D:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/climits \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qsharedpointer.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qshareddata.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qsharedpointer_impl.h \
+ D:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/set \
+ D:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/bits/stl_set.h \
+ D:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/bits/stl_multiset.h \
+ D:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/unordered_set \
+ D:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/bits/unordered_set.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qmap.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qshareddata_impl.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qset.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qhash.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qvarlengtharray.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qalloc.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/q23utility.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/q20utility.h \
  D:\AESA\PSU\code\UI\PSU_UI\protocol.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/QByteArray \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/QString \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/QStringList \
  D:\AESA\PSU\code\UI\PSU_UI\packet_parser.h \
  D:\AESA\PSU\code\UI\PSU_UI\serial_manager.h \
  D:/Qt/6.11.1/mingw_64/include/QtSerialPort/QSerialPort \
@@ -343,12 +370,10 @@ CMakeFiles/PSU_UI.dir/measurement_controller.cpp.obj: \
  D:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/cassert \
  D:/Qt/6.11.1/mingw_64/include/QtCore/q20iterator.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qproperty.h \
- D:/Qt/6.11.1/mingw_64/include/QtCore/qshareddata.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qpropertyprivate.h \
  D:/Qt/Tools/mingw1310_64/lib/gcc/x86_64-w64-mingw32/13.1.0/include/c++/experimental/source_location \
  D:/Qt/6.11.1/mingw_64/include/QtSerialPort/qserialportglobal.h \
  D:/Qt/6.11.1/mingw_64/include/QtSerialPort/qtserialportexports.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/QVector \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qvector.h \
- D:/Qt/6.11.1/mingw_64/include/QtCore/QPair \
- D:/Qt/6.11.1/mingw_64/include/QtCore/QString
+ D:/Qt/6.11.1/mingw_64/include/QtCore/QPair

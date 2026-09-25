@@ -31,14 +31,14 @@ QT_WARNING_PUSH
 QT_WARNING_DISABLE_DEPRECATED
 QT_WARNING_DISABLE_GCC("-Wuseless-cast")
 namespace {
-struct qt_meta_tag_ZN10CSV_LoggerE_t {};
+struct qt_meta_tag_ZN10Csv_LoggerE_t {};
 } // unnamed namespace
 
-template <> constexpr inline auto CSV_Logger::qt_create_metaobjectdata<qt_meta_tag_ZN10CSV_LoggerE_t>()
+template <> constexpr inline auto Csv_Logger::qt_create_metaobjectdata<qt_meta_tag_ZN10Csv_LoggerE_t>()
 {
     namespace QMC = QtMocConstants;
     QtMocHelpers::StringRefStorage qt_stringData {
-        "CSV_Logger",
+        "Csv_Logger",
         "loggingStateChanged",
         "",
         "logging",
@@ -67,22 +67,22 @@ template <> constexpr inline auto CSV_Logger::qt_create_metaobjectdata<qt_meta_t
     };
     QtMocHelpers::UintData qt_enums {
     };
-    return QtMocHelpers::metaObjectData<CSV_Logger, qt_meta_tag_ZN10CSV_LoggerE_t>(QMC::MetaObjectFlag{}, qt_stringData,
+    return QtMocHelpers::metaObjectData<Csv_Logger, qt_meta_tag_ZN10Csv_LoggerE_t>(QMC::MetaObjectFlag{}, qt_stringData,
             qt_methods, qt_properties, qt_enums);
 }
-Q_CONSTINIT const QMetaObject CSV_Logger::staticMetaObject = { {
+Q_CONSTINIT const QMetaObject Csv_Logger::staticMetaObject = { {
     QMetaObject::SuperData::link<QObject::staticMetaObject>(),
-    qt_staticMetaObjectStaticContent<qt_meta_tag_ZN10CSV_LoggerE_t>.stringdata,
-    qt_staticMetaObjectStaticContent<qt_meta_tag_ZN10CSV_LoggerE_t>.data,
+    qt_staticMetaObjectStaticContent<qt_meta_tag_ZN10Csv_LoggerE_t>.stringdata,
+    qt_staticMetaObjectStaticContent<qt_meta_tag_ZN10Csv_LoggerE_t>.data,
     qt_static_metacall,
     nullptr,
-    qt_staticMetaObjectRelocatingContent<qt_meta_tag_ZN10CSV_LoggerE_t>.metaTypes,
+    qt_staticMetaObjectRelocatingContent<qt_meta_tag_ZN10Csv_LoggerE_t>.metaTypes,
     nullptr
 } };
 
-void CSV_Logger::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, void **_a)
+void Csv_Logger::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, void **_a)
 {
-    auto *_t = static_cast<CSV_Logger *>(_o);
+    auto *_t = static_cast<Csv_Logger *>(_o);
     if (_c == QMetaObject::InvokeMetaMethod) {
         switch (_id) {
         case 0: _t->loggingStateChanged((*reinterpret_cast<std::add_pointer_t<bool>>(_a[1]))); break;
@@ -92,27 +92,27 @@ void CSV_Logger::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, 
         }
     }
     if (_c == QMetaObject::IndexOfMethod) {
-        if (QtMocHelpers::indexOfMethod<void (CSV_Logger::*)(bool )>(_a, &CSV_Logger::loggingStateChanged, 0))
+        if (QtMocHelpers::indexOfMethod<void (Csv_Logger::*)(bool )>(_a, &Csv_Logger::loggingStateChanged, 0))
             return;
-        if (QtMocHelpers::indexOfMethod<void (CSV_Logger::*)(const QString & )>(_a, &CSV_Logger::errorOccurred, 1))
+        if (QtMocHelpers::indexOfMethod<void (Csv_Logger::*)(const QString & )>(_a, &Csv_Logger::errorOccurred, 1))
             return;
     }
 }
 
-const QMetaObject *CSV_Logger::metaObject() const
+const QMetaObject *Csv_Logger::metaObject() const
 {
     return QObject::d_ptr->metaObject ? QObject::d_ptr->dynamicMetaObject() : &staticMetaObject;
 }
 
-void *CSV_Logger::qt_metacast(const char *_clname)
+void *Csv_Logger::qt_metacast(const char *_clname)
 {
     if (!_clname) return nullptr;
-    if (!strcmp(_clname, qt_staticMetaObjectStaticContent<qt_meta_tag_ZN10CSV_LoggerE_t>.strings))
+    if (!strcmp(_clname, qt_staticMetaObjectStaticContent<qt_meta_tag_ZN10Csv_LoggerE_t>.strings))
         return static_cast<void*>(this);
     return QObject::qt_metacast(_clname);
 }
 
-int CSV_Logger::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
+int Csv_Logger::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
 {
     _id = QObject::qt_metacall(_c, _id, _a);
     if (_id < 0)
@@ -131,13 +131,13 @@ int CSV_Logger::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
 }
 
 // SIGNAL 0
-void CSV_Logger::loggingStateChanged(bool _t1)
+void Csv_Logger::loggingStateChanged(bool _t1)
 {
     QMetaObject::activate<void>(this, &staticMetaObject, 0, nullptr, _t1);
 }
 
 // SIGNAL 1
-void CSV_Logger::errorOccurred(const QString & _t1)
+void Csv_Logger::errorOccurred(const QString & _t1)
 {
     QMetaObject::activate<void>(this, &staticMetaObject, 1, nullptr, _t1);
 }

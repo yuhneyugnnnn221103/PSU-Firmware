@@ -386,8 +386,14 @@ CMakeFiles/PSU_UI.dir/ina228_widget.cpp.obj: \
  D:/Qt/6.11.1/mingw_64/include/QtGui/qbitmap.h \
  D:\AESA\PSU\code\UI\PSU_UI\ina228_data.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/QtGlobal \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/QDateTime \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qdatetime.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qcalendar.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qlocale.h \
  D:\AESA\PSU\code\UI\PSU_UI\protocol.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/QByteArray \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/QString \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/QStringList \
  D:/Qt/6.11.1/mingw_64/include/QtWidgets/QGroupBox \
  D:/Qt/6.11.1/mingw_64/include/QtWidgets/qgroupbox.h \
  D:/Qt/6.11.1/mingw_64/include/QtWidgets/qframe.h \
@@ -404,4 +410,13 @@ CMakeFiles/PSU_UI.dir/ina228_widget.cpp.obj: \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qiodevice.h \
  D:/Qt/6.11.1/mingw_64/include/QtGui/qtextdocument.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qurl.h \
+ D:/Qt/6.11.1/mingw_64/include/QtWidgets/QPushButton \
+ D:/Qt/6.11.1/mingw_64/include/QtWidgets/qpushbutton.h \
+ D:/Qt/6.11.1/mingw_64/include/QtWidgets/qabstractbutton.h \
+ D:/Qt/6.11.1/mingw_64/include/QtWidgets/QDoubleSpinBox \
+ D:/Qt/6.11.1/mingw_64/include/QtWidgets/qspinbox.h \
+ D:/Qt/6.11.1/mingw_64/include/QtWidgets/qabstractspinbox.h \
+ D:/Qt/6.11.1/mingw_64/include/QtGui/qvalidator.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qregularexpression.h \
+ D:/Qt/6.11.1/mingw_64/include/QtWidgets/QFrame \
  D:/Qt/6.11.1/mingw_64/include/QtGui/QFont

@@ -3,91 +3,264 @@
 
 #include <QtGlobal>
 #include <QByteArray>
+#include <QString>
+#include <QStringList>
+#include <cstring>
 
 /* ============================================================================
- *  LAYOUT KHUNG TRUYỀN - phải khớp firmware STM32
- * ----------------------------------------------------------------------------
- *  Firmware đã tự sign-extend và dịch bit trước khi gửi, nên PC KHÔNG dịch
- *  bit và KHÔNG mở rộng dấu theo 20/24/40-bit nữa. Mỗi trường chỉ là một số
- *  nguyên big-endian có kích thước cố định:
+ *  Giao thuc PMON - khop voi comm.h / comm.c cua firmware STM32H725
  *
- *      offset  size  kiểu       nội dung (đã hiệu chỉnh ở firmware)
- *      ------  ----  ---------  ---------------------------------------------
- *        0      4    int32      CURRENT   (20-bit đã sign-extend)
- *        4      4    uint32     VBUS      (20-bit)
- *        8      2    int16      DIETEMP   (16-bit)
+ *  Moi khung deu co dang:  AB CD | CMD | ... | CRC16(BE) | E1 E2
+ *  CRC16-CCITT (init 0xFFFF, poly 0x1021) phu byte [2 .. len-5],
+ *  tuc tu CMD den ngay truoc o CRC. Quy tac nay dung cho CA HAI chieu.
  * ========================================================================== */
 
 namespace Protocol
 {
 
-/* ---- Khung ---- */
 constexpr quint8 HEADER1 = 0xAB;
 constexpr quint8 HEADER2 = 0xCD;
 constexpr quint8 TAILER1 = 0xE1;
 constexpr quint8 TAILER2 = 0xE2;
 
-constexpr quint8 CMD_MONITOR = 0x01;
-
 constexpr int IC_COUNT = 4;
 
-/* ----------------------------------------------------------------------------
- * Mô tả một trường số nguyên big-endian trên đường truyền.
- *   offset   : vị trí byte đầu trong block của 1 IC
- *   size     : số byte truyền (2 / 4 / 8)
- *   isSigned : mở rộng dấu từ bit cao nhất của chính `size` byte đó
- * -------------------------------------------------------------------------- */
-struct Field
+/* ---- Ma lenh ---- */
+constexpr quint8 CMD_TELEMETRY = 0x01;   /* STM -> PC  */
+/* 0x02 (EVENT) da nghi huu - xem CMD_STATUS va CMD_TELEMETRY */
+
+constexpr quint8 CMD_STATUS    = 0x03;
+
+constexpr quint8 CMD_PWR_CTRL  = 0x88;   /* PC  -> STM */
+constexpr quint8 CMD_SET_LIMIT = 0x89;   /* PC  -> STM */
+constexpr quint8 CMD_LIMIT_ACK = 0x8A;   /* STM -> PC  */
+constexpr quint8 CMD_CLR_FAULT = 0x8B;   /* PC  -> STM */
+constexpr quint8 CMD_GET_LIMIT = 0x8C;   /* PC  -> STM */
+
+/* ---- Kich thuoc khung ---- */
+constexpr int TLM_BLOCK_SIZE  = 12;
+constexpr int TLM_PAYLOAD_OFF = 4;
+constexpr int TLM_FRAME_SIZE  = TLM_PAYLOAD_OFF + IC_COUNT * TLM_BLOCK_SIZE + 4;
+
+constexpr int AUX_FRAME_SIZE  = 16;   /* 0x02 va 0x8A       */
+constexpr int RX_FRAME_SIZE   = 8;    /* 0x88 / 0x8B / 0x8C */
+constexpr int CFG_FRAME_SIZE  = 20;   /* 0x89               */
+
+static_assert(TLM_FRAME_SIZE == 56, "Khung telemetry phai dai 56 byte");
+
+/* ---- Telemetry: offset trong 1 block 12 byte ---- */
+constexpr int OFF_CURRENT = 0;    /* int32  BE, firmware da sign-extend */
+constexpr int OFF_VBUS    = 4;    /* uint32 BE                          */
+constexpr int OFF_DIETEMP = 8;    /* int16  BE                          */
+constexpr int OFF_DIAG    = 10;   /* uint16 BE: sticky | (alrt & FAULT) */
+
+constexpr int STATUS_OFFSET = 3;
+
+/* ---- LIMIT_ACK (0x8A) ---- */
+constexpr int ACK_OFF_CH     = 3;
+constexpr int ACK_OFF_STATUS = 4;
+constexpr int ACK_OFF_SOVL   = 6;
+constexpr int ACK_OFF_BOVL   = 8;
+constexpr int ACK_OFF_BUVL   = 10;
+
+/* ---- STATUS (0x03), dung AUX_FRAME_SIZE = 16, khop TLM_STS_OFF_* firmware ---- */
+constexpr int STS_OFF_STATE    = 3;   /* bit7..4 = safe_state, bit3..0 = fault_code */
+constexpr int STS_OFF_TRIPMASK = 4;
+constexpr int STS_OFF_DCM      = 5;
+constexpr int STS_OFF_FRESH    = 6;
+constexpr int STS_OFF_CFGOK    = 7;
+constexpr int STS_OFF_PWR      = 8;
+constexpr int STS_OFF_TRIPCNT  = 9;
+
+/** May trang thai bao ve o firmware (safety.h::safe_state_t). */
+enum class SafeState : quint8
 {
-    int  offset;
-    int  size;
-    bool isSigned;
+    Boot    = 0,
+    Off     = 1,
+    Arming  = 2,
+    On      = 3,
+    Tripped = 4,
+    Lockout = 5
 };
 
-constexpr Field F_CURRENT { 0,  4, true  };   /* int32  */
-constexpr Field F_VBUS    { 4,  4, false };   /* uint32 */
-constexpr Field F_TEMP    { 8,  2, true  };   /* int16  */
-// constexpr Field F_POWER   { 10, 4, false };   /* uint32 */
-// constexpr Field F_VSHUNT  { 14, 4, true  };   /* int32  */
-// constexpr Field F_ENERGY  { 18, 8, false };   /* uint64 */
-// constexpr Field F_CHARGE  { 26, 8, true  };   /* int64  */
+/** Ma loi gay trip (safety.h::fault_code_t). */
+enum class FaultCode : quint8
+{
+    None      = 0,
+    Overcur   = 1,
+    Overvolt  = 2,
+    Undervolt = 3,
+    Overtemp  = 4,
+    Dcm       = 5,
+    Bus       = 6
+};
 
-constexpr int IC_SIZE = 10;
+inline QString safeStateText(SafeState s)
+{
+    switch (s)
+    {
+    case SafeState::Boot:    return QStringLiteral("BOOT");
+    case SafeState::Off:     return QStringLiteral("OFF");
+    case SafeState::Arming:  return QStringLiteral("ARMING");
+    case SafeState::On:      return QStringLiteral("ON");
+    case SafeState::Tripped: return QStringLiteral("TRIPPED");
+    case SafeState::Lockout: return QStringLiteral("LOCKOUT");
+    }
+    return QStringLiteral("?");
+}
 
-/* ---- Offset trong khung: dẫn xuất, không hard-code ---- */
-constexpr int CMD_OFFSET    = 2;
-constexpr int STATUS_OFFSET = 3;
-constexpr int IC1_OFFSET    = 4;
-constexpr int CRC_OFFSET    = IC1_OFFSET + IC_COUNT * IC_SIZE;
-constexpr int CRC_SIZE      = 2;
-constexpr int TAILER_OFFSET = CRC_OFFSET + CRC_SIZE;
-constexpr int FRAME_SIZE    = TAILER_OFFSET + 2;
+inline QString faultCodeText(FaultCode c)
+{
+    switch (c)
+    {
+    case FaultCode::None:      return QStringLiteral("--");
+    case FaultCode::Overcur:   return QStringLiteral("Qua dong / dong nguoc");
+    case FaultCode::Overvolt:  return QStringLiteral("Qua ap bus");
+    case FaultCode::Undervolt: return QStringLiteral("Sut ap bus");
+    case FaultCode::Overtemp:  return QStringLiteral("Qua nhiet");
+    case FaultCode::Dcm:       return QStringLiteral("Loi FT tu DCM");
+    case FaultCode::Bus:       return QStringLiteral("Mat lien lac I2C");
+    }
+    return QStringLiteral("?");
+}
 
-constexpr int CRC_START  = CMD_OFFSET;
-constexpr int CRC_LENGTH = CRC_OFFSET - CRC_START;
+constexpr quint8 ACK_OK      = 0;
+constexpr quint8 ACK_I2C_ERR = 1;
+constexpr quint8 ACK_PARAM   = 2;
+constexpr quint8 ACK_NO_DEV  = 3;
+constexpr quint8 ACK_REFUSED = 4;   /* tu choi PWR_CTRL(on) vi dang TRIPPED/LOCKOUT */
 
-static_assert(F_TEMP.offset + F_TEMP.size == IC_SIZE,
-              "Bang Field khong khop IC_SIZE");
-static_assert(FRAME_SIZE == 48, "Khung phai dai 48 byte");
+/** LIMIT_ACK voi channel nay la ACK toan cuc (vd PWR_CTRL bi tu choi),
+ *  khong gan voi mot kenh INA228 cu the nao. */
+constexpr quint8 ACK_CH_GLOBAL = 0xFF;
 
-/* ---- Byte trạng thái ---- */
-constexpr quint8 INA_FRESH_MASK = 0x0F;
-constexpr quint8 FT_FAULT_MASK  = 0xF0;
-constexpr int    FT_FAULT_SHIFT = 4;
+/* ---- SET_LIMIT (0x89) ---- */
+constexpr int CFG_OFF_CH   = 3;
+constexpr int CFG_OFF_SOVL = 4;    /* float32 BE, don vi A */
+constexpr int CFG_OFF_BOVL = 8;    /* float32 BE, don vi V */
+constexpr int CFG_OFF_BUVL = 12;   /* float32 BE, don vi V */
+constexpr quint8 CFG_CH_ALL = 0xFF;
 
-/* ---- Hệ số quy đổi INA228 (ADCRANGE=1, Rshunt=1 mOhm, CURRENT_LSB=78.125 uA) ---- */
+constexpr int RX_OFF_CTRL = 3;
+
+/* ---- Byte trang thai telemetry ---- */
+constexpr quint8 ST_FRESH_MASK      = 0x0F;
+constexpr int    ST_DCM_FAULT_SHIFT = 4;
+
+/* ---- He so quy doi (ADCRANGE=1, Rshunt = 1 mOhm) ---- */
+constexpr double R_SHUNT_OHM   = 0.001;
 constexpr double CURRENT_LSB_A = 78.125e-6;
 constexpr double VBUS_LSB_V    = 195.3125e-6;
-constexpr double VSHUNT_LSB_V  = 78.125e-9;
 constexpr double TEMP_LSB_C    = 7.8125e-3;
-constexpr double POWER_LSB_W   = 250.0e-6;     /* 3.2 * CURRENT_LSB */
-constexpr double ENERGY_LSB_J  = 4.0e-3;       /* 16 * POWER_LSB    */
-constexpr double CHARGE_LSB_C  = CURRENT_LSB_A;
 
-/* ---- Địa chỉ I2C (A1-A0), chỉ dùng để hiển thị ---- */
-constexpr quint8 I2C_ADDR[IC_COUNT] = { 0x40, 0x44, 0x41, 0x45 };
+/* Thanh ghi nguong chi 16-bit -> LSB gap 16 lan LSB do luong */
+constexpr double SOVL_LSB_V  = 1.25e-6;
+constexpr double BUSVL_LSB_V = 3.125e-3;
 
-/* ---- CRC16-CCITT (init 0xFFFF, poly 0x1021, không reflect) ---- */
+constexpr quint16 SOVL_DISABLED = 0x7FFF;
+constexpr quint16 BOVL_DISABLED = 0x7FFF;
+constexpr quint16 BUVL_DISABLED = 0x0000;
+
+constexpr double SOVL_MAX_A  = 32767.0 * SOVL_LSB_V / R_SHUNT_OHM;   /* 40.959 A */
+constexpr double BUSVL_MAX_V = 32767.0 * BUSVL_LSB_V;                /* 102.4 V  */
+
+inline double sovlRawToAmp(quint16 raw)
+{
+    return static_cast<double>(static_cast<qint16>(raw)) * SOVL_LSB_V / R_SHUNT_OHM;
+}
+
+inline double busvRawToVolt(quint16 raw)
+{
+    return static_cast<double>(raw & 0x7FFF) * BUSVL_LSB_V;
+}
+
+constexpr quint8 I2C_ADDR[IC_COUNT] = { 0x40, 0x41, 0x44, 0x45 };
+
+/* ============================================================================
+ *  DIAG_ALRT (0x0B) - giai ma bit loi
+ * ========================================================================== */
+constexpr quint16 FLAG_ALATCH    = 1u << 15;
+constexpr quint16 FLAG_CNVR      = 1u << 14;
+constexpr quint16 FLAG_SLOWALERT = 1u << 13;
+constexpr quint16 FLAG_APOL      = 1u << 12;
+constexpr quint16 FLAG_ENERGYOF  = 1u << 11;
+constexpr quint16 FLAG_CHARGEOF  = 1u << 10;
+constexpr quint16 FLAG_MATHOF    = 1u <<  9;
+constexpr quint16 FLAG_TMPOL     = 1u <<  7;
+constexpr quint16 FLAG_SHNTOL    = 1u <<  6;
+constexpr quint16 FLAG_SHNTUL    = 1u <<  5;
+constexpr quint16 FLAG_BUSOL     = 1u <<  4;
+constexpr quint16 FLAG_BUSUL     = 1u <<  3;
+constexpr quint16 FLAG_POL       = 1u <<  2;
+constexpr quint16 FLAG_CNVRF     = 1u <<  1;
+constexpr quint16 FLAG_MEMSTAT   = 1u <<  0;
+
+constexpr quint16 FAULT_MASK = FLAG_TMPOL | FLAG_SHNTOL | FLAG_SHNTUL |
+                               FLAG_BUSOL | FLAG_BUSUL | FLAG_POL | FLAG_MATHOF;
+
+/** Ten ngan cua tung bit loi dang bat, de hien tren the kenh. */
+inline QStringList diagFaultNames(quint16 diag)
+{
+    QStringList out;
+
+    if (diag & FLAG_SHNTOL)   out << QStringLiteral("OVERCURRENT");
+    if (diag & FLAG_SHNTUL)   out << QStringLiteral("REVERSE I");
+    if (diag & FLAG_BUSOL)    out << QStringLiteral("OVERVOLTAGE");
+    if (diag & FLAG_BUSUL)    out << QStringLiteral("UNDERVOLTAGE");
+    if (diag & FLAG_TMPOL)    out << QStringLiteral("OVERTEMP");
+    if (diag & FLAG_POL)      out << QStringLiteral("POWER LIMIT");
+    if (diag & FLAG_MATHOF)   out << QStringLiteral("MATH OVF");
+    if (diag & FLAG_ENERGYOF) out << QStringLiteral("ENERGY OVF");
+    if (diag & FLAG_CHARGEOF) out << QStringLiteral("CHARGE OVF");
+
+    return out;
+}
+
+/** Mo ta day du, dung cho nhat ky su kien. */
+inline QString diagDescription(quint16 diag)
+{
+    struct Item { quint16 bit; const char *text; };
+
+    static const Item items[] = {
+                                  { FLAG_SHNTOL,   "Qua dong (SHNTOL) - vuot nguong SOVL" },
+                                  { FLAG_SHNTUL,   "Dong nguoc chieu (SHNTUL) - duoi nguong SUVL" },
+                                  { FLAG_BUSOL,    "Qua ap bus (BUSOL) - vuot nguong BOVL" },
+                                  { FLAG_BUSUL,    "Sut ap bus (BUSUL) - duoi nguong BUVL" },
+                                  { FLAG_TMPOL,    "Qua nhiet die (TMPOL)" },
+                                  { FLAG_POL,      "Vuot gioi han cong suat (POL)" },
+                                  { FLAG_MATHOF,   "Tran phep toan noi bo (MATHOF)" },
+                                  { FLAG_ENERGYOF, "Tran thanh ghi ENERGY" },
+                                  { FLAG_CHARGEOF, "Tran thanh ghi CHARGE" },
+                                  };
+
+    QStringList parts;
+
+    for (const Item &it : items)
+        if (diag & it.bit)
+            parts << QString::fromUtf8(it.text);
+
+    if (parts.isEmpty())
+        return QStringLiteral("Khong co loi");
+
+    return parts.join(QStringLiteral("; "));
+}
+
+inline QString ackStatusText(quint8 status)
+{
+    switch (status)
+    {
+    case ACK_OK:      return QStringLiteral("OK");
+    case ACK_I2C_ERR: return QStringLiteral("I2C ERROR");
+    case ACK_PARAM:   return QStringLiteral("BAD PARAM");
+    case ACK_NO_DEV:  return QStringLiteral("NO DEVICE");
+    case ACK_REFUSED: return QStringLiteral("REFUSED (TRIPPED/LOCKOUT)");
+    default:          return QStringLiteral("UNKNOWN (%1)").arg(status);
+    }
+}
+
+/* ============================================================================
+ *  CRC16-CCITT
+ * ========================================================================== */
 inline quint16 crc16Ccitt(const quint8 *data, int len, quint16 crc = 0xFFFF)
 {
     for (int i = 0; i < len; ++i)
@@ -106,74 +279,108 @@ inline quint16 crc16Ccitt(const QByteArray &data, int offset, int len)
     return crc16Ccitt(reinterpret_cast<const quint8 *>(data.constData()) + offset, len);
 }
 
-/* Firmware đang để CRC = 0 trong giai đoạn bring-up.
- * Đặt false ngay khi firmware tính CRC thật. */
-constexpr bool ACCEPT_ZERO_CRC = true;
+/* Firmware da bat CRC. Chi dat true khi can bring-up voi CRC = 0. */
+// constexpr bool ACCEPT_ZERO_CRC = true;
+constexpr bool ACCEPT_ZERO_CRC = false;
 
-/* CRC truyền big-endian? Đổi thành false nếu firmware gửi little-endian. */
-constexpr bool CRC_BIG_ENDIAN = true;
-
+/** Do dai khung theo byte CMD. Tra 0 neu CMD khong thuoc chieu STM -> PC. */
+inline int frameLengthForCmd(quint8 cmd)
+{
+    switch (cmd)
+    {
+    case CMD_TELEMETRY: return TLM_FRAME_SIZE;
+    case CMD_LIMIT_ACK: return AUX_FRAME_SIZE;
+    case CMD_STATUS:    return AUX_FRAME_SIZE;
+    default:            return 0;
+    }
+}
 
 /* ============================================================================
- *  KHUNG LỆNH PC -> STM32 (8 byte)
- * ----------------------------------------------------------------------------
- *      0   0xAB        HEADER1
- *      1   0xCD        HEADER2
- *      2   0x88        CMD_POWER_CTRL
- *      3   0x00/0x01   0 = tắt nguồn, 1 = bật nguồn mạch INA228
- *      4   CRC hi      CRC16-CCITT trên byte [2..3]
- *      5   CRC lo
- *      6   0xE1        TAILER1
- *      7   0xE2        TAILER2
- *
- *  CRC dùng cùng thuật toán và cùng quy ước phạm vi với khung nhận:
- *  bắt đầu từ byte CMD, kết thúc ngay trước ô CRC.
+ *  DUNG KHUNG LENH PC -> STM
  * ========================================================================== */
+namespace detail {
 
-constexpr quint8 CMD_POWER_CTRL = 0x88;
-
-constexpr quint8 POWER_DISABLE = 0x00;
-constexpr quint8 POWER_ENABLE  = 0x01;
-
-constexpr int CMD_FRAME_SIZE   = 8;
-constexpr int CMD_CTRL_OFFSET  = 3;
-constexpr int CMD_CRC_OFFSET   = 4;
-constexpr int CMD_TAILER_OFFSET = 6;
-
-constexpr int CMD_CRC_START  = 2;
-constexpr int CMD_CRC_LENGTH = CMD_CRC_OFFSET - CMD_CRC_START;   /* = 2 */
-
-static_assert(CMD_TAILER_OFFSET + 2 == CMD_FRAME_SIZE,
-              "Khung lenh phai dai 8 byte");
-
-
-inline QByteArray buildPowerControlFrame(bool enable)
+inline void putBE16(QByteArray &f, int off, quint16 v)
 {
-    QByteArray f(CMD_FRAME_SIZE, '\0');
+    f[off]     = static_cast<char>(v >> 8);
+    f[off + 1] = static_cast<char>(v & 0xFF);
+}
+
+inline void putBEFloat(QByteArray &f, int off, float v)
+{
+    quint32 u = 0;
+    std::memcpy(&u, &v, sizeof(u));
+
+    f[off]     = static_cast<char>(u >> 24);
+    f[off + 1] = static_cast<char>(u >> 16);
+    f[off + 2] = static_cast<char>(u >> 8);
+    f[off + 3] = static_cast<char>(u);
+}
+
+/** Dien header, CMD, CRC va tailer cho khung do dai bat ky. */
+inline void seal(QByteArray &f, quint8 cmd)
+{
+    const int len    = f.size();
+    const int crcOff = len - 4;
 
     f[0] = static_cast<char>(HEADER1);
     f[1] = static_cast<char>(HEADER2);
-    f[2] = static_cast<char>(CMD_POWER_CTRL);
-    f[CMD_CTRL_OFFSET] =
-        static_cast<char>(enable ? POWER_ENABLE : POWER_DISABLE);
+    f[2] = static_cast<char>(cmd);
 
-    // const quint16 crc = crc16Ccitt(f, CMD_CRC_START, CMD_CRC_LENGTH);
-    const quint16 crc = 0;
+    putBE16(f, crcOff, crc16Ccitt(f, 2, crcOff - 2));
 
-    if (CRC_BIG_ENDIAN)
-    {
-        f[CMD_CRC_OFFSET]     = static_cast<char>(crc >> 8);
-        f[CMD_CRC_OFFSET + 1] = static_cast<char>(crc & 0xFF);
-    }
-    else
-    {
-        f[CMD_CRC_OFFSET]     = static_cast<char>(crc & 0xFF);
-        f[CMD_CRC_OFFSET + 1] = static_cast<char>(crc >> 8);
-    }
+    f[len - 2] = static_cast<char>(TAILER1);
+    f[len - 1] = static_cast<char>(TAILER2);
+}
 
-    f[CMD_TAILER_OFFSET]     = static_cast<char>(TAILER1);
-    f[CMD_TAILER_OFFSET + 1] = static_cast<char>(TAILER2);
+} // namespace detail
 
+/** 0x88 - bat/tat nguon mach INA228. */
+inline QByteArray buildPowerControlFrame(bool enable)
+{
+    QByteArray f(RX_FRAME_SIZE, '\0');
+    f[RX_OFF_CTRL] = static_cast<char>(enable ? 1 : 0);
+    detail::seal(f, CMD_PWR_CTRL);
+    return f;
+}
+
+/**
+ * 0x89 - dat nguong canh bao.
+ * @param channel 0..3, hoac CFG_CH_ALL cho ca 4 kenh
+ * @param sovlA   qua dong, A.   <= 0 = tat canh bao
+ * @param bovlV   qua ap bus, V. <= 0 = tat
+ * @param buvlV   sut ap bus, V. <= 0 = tat
+ */
+inline QByteArray buildSetLimitFrame(quint8 channel,
+                                     double sovlA, double bovlV, double buvlV)
+{
+    QByteArray f(CFG_FRAME_SIZE, '\0');
+
+    f[CFG_OFF_CH] = static_cast<char>(channel);
+
+    detail::putBEFloat(f, CFG_OFF_SOVL, static_cast<float>(sovlA));
+    detail::putBEFloat(f, CFG_OFF_BOVL, static_cast<float>(bovlV));
+    detail::putBEFloat(f, CFG_OFF_BUVL, static_cast<float>(buvlV));
+
+    detail::seal(f, CMD_SET_LIMIT);
+    return f;
+}
+
+/** 0x8C - doc lai nguong cua mot kenh (hoac CFG_CH_ALL). */
+inline QByteArray buildGetLimitFrame(quint8 channel)
+{
+    QByteArray f(RX_FRAME_SIZE, '\0');
+    f[RX_OFF_CTRL] = static_cast<char>(channel);
+    detail::seal(f, CMD_GET_LIMIT);
+    return f;
+}
+
+/** 0x8B - xoa co loi sticky. mask bit0..3 ung voi kenh 1..4. */
+inline QByteArray buildClearFaultFrame(quint8 channelMask)
+{
+    QByteArray f(RX_FRAME_SIZE, '\0');
+    f[RX_OFF_CTRL] = static_cast<char>(channelMask & 0x0F);
+    detail::seal(f, CMD_CLR_FAULT);
     return f;
 }
 

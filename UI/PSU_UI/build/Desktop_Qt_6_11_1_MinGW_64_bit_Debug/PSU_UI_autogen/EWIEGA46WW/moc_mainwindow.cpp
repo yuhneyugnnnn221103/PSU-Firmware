@@ -43,28 +43,40 @@ template <> constexpr inline auto MainWindow::qt_create_metaobjectdata<qt_meta_t
         "",
         "onRefreshPortsClicked",
         "onLogClicked",
-        "onClearPlotsClicked",
-        "onWindowSecChanged",
-        "index",
         "onPowerEnableClicked",
         "onPowerDisableClicked",
         "onPowerCommandSent",
         "enable",
+        "onLimitAckReceived",
+        "LimitAck",
+        "ack",
+        "onSetLimitsRequested",
+        "ch",
+        "sovlA",
+        "bovlV",
+        "buvlV",
+        "onGetLimitsRequested",
+        "onClearFaultsClicked",
+        "onClearPlotsClicked",
+        "onWindowSecChanged",
+        "index",
         "onMeasurementUpdated",
         "MeasurementPacket",
         "packet",
         "onSystemStatusUpdated",
         "SystemStatus",
         "status",
+        "onSafetyStatusUpdated",
+        "StatusPacket",
         "onConnectionStateChanged",
         "connected",
         "onCommunicationStatsChanged",
         "onLinkStaleChanged",
         "stale",
-        "onErrorOccurred",
-        "message",
         "onLoggingStateChanged",
-        "logging"
+        "logging",
+        "onErrorOccurred",
+        "message"
     };
 
     QtMocHelpers::UintData qt_methods {
@@ -74,45 +86,63 @@ template <> constexpr inline auto MainWindow::qt_create_metaobjectdata<qt_meta_t
         QtMocHelpers::SlotData<void()>(3, 2, QMC::AccessPrivate, QMetaType::Void),
         // Slot 'onLogClicked'
         QtMocHelpers::SlotData<void()>(4, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'onClearPlotsClicked'
-        QtMocHelpers::SlotData<void()>(5, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'onWindowSecChanged'
-        QtMocHelpers::SlotData<void(int)>(6, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Int, 7 },
-        }}),
         // Slot 'onPowerEnableClicked'
-        QtMocHelpers::SlotData<void()>(8, 2, QMC::AccessPrivate, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(5, 2, QMC::AccessPrivate, QMetaType::Void),
         // Slot 'onPowerDisableClicked'
-        QtMocHelpers::SlotData<void()>(9, 2, QMC::AccessPrivate, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(6, 2, QMC::AccessPrivate, QMetaType::Void),
         // Slot 'onPowerCommandSent'
-        QtMocHelpers::SlotData<void(bool)>(10, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Bool, 11 },
+        QtMocHelpers::SlotData<void(bool)>(7, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Bool, 8 },
+        }}),
+        // Slot 'onLimitAckReceived'
+        QtMocHelpers::SlotData<void(const LimitAck &)>(9, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { 0x80000000 | 10, 11 },
+        }}),
+        // Slot 'onSetLimitsRequested'
+        QtMocHelpers::SlotData<void(int, double, double, double)>(12, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Int, 13 }, { QMetaType::Double, 14 }, { QMetaType::Double, 15 }, { QMetaType::Double, 16 },
+        }}),
+        // Slot 'onGetLimitsRequested'
+        QtMocHelpers::SlotData<void(int)>(17, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Int, 13 },
+        }}),
+        // Slot 'onClearFaultsClicked'
+        QtMocHelpers::SlotData<void()>(18, 2, QMC::AccessPrivate, QMetaType::Void),
+        // Slot 'onClearPlotsClicked'
+        QtMocHelpers::SlotData<void()>(19, 2, QMC::AccessPrivate, QMetaType::Void),
+        // Slot 'onWindowSecChanged'
+        QtMocHelpers::SlotData<void(int)>(20, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Int, 21 },
         }}),
         // Slot 'onMeasurementUpdated'
-        QtMocHelpers::SlotData<void(const MeasurementPacket &)>(12, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { 0x80000000 | 13, 14 },
+        QtMocHelpers::SlotData<void(const MeasurementPacket &)>(22, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { 0x80000000 | 23, 24 },
         }}),
         // Slot 'onSystemStatusUpdated'
-        QtMocHelpers::SlotData<void(const SystemStatus &)>(15, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { 0x80000000 | 16, 17 },
+        QtMocHelpers::SlotData<void(const SystemStatus &)>(25, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { 0x80000000 | 26, 27 },
+        }}),
+        // Slot 'onSafetyStatusUpdated'
+        QtMocHelpers::SlotData<void(const StatusPacket &)>(28, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { 0x80000000 | 29, 27 },
         }}),
         // Slot 'onConnectionStateChanged'
-        QtMocHelpers::SlotData<void(bool)>(18, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Bool, 19 },
+        QtMocHelpers::SlotData<void(bool)>(30, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Bool, 31 },
         }}),
         // Slot 'onCommunicationStatsChanged'
-        QtMocHelpers::SlotData<void()>(20, 2, QMC::AccessPrivate, QMetaType::Void),
+        QtMocHelpers::SlotData<void()>(32, 2, QMC::AccessPrivate, QMetaType::Void),
         // Slot 'onLinkStaleChanged'
-        QtMocHelpers::SlotData<void(bool)>(21, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Bool, 22 },
-        }}),
-        // Slot 'onErrorOccurred'
-        QtMocHelpers::SlotData<void(const QString &)>(23, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::QString, 24 },
+        QtMocHelpers::SlotData<void(bool)>(33, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Bool, 34 },
         }}),
         // Slot 'onLoggingStateChanged'
-        QtMocHelpers::SlotData<void(bool)>(25, 2, QMC::AccessPrivate, QMetaType::Void, {{
-            { QMetaType::Bool, 26 },
+        QtMocHelpers::SlotData<void(bool)>(35, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::Bool, 36 },
+        }}),
+        // Slot 'onErrorOccurred'
+        QtMocHelpers::SlotData<void(const QString &)>(37, 2, QMC::AccessPrivate, QMetaType::Void, {{
+            { QMetaType::QString, 38 },
         }}),
     };
     QtMocHelpers::UintData qt_properties {
@@ -140,18 +170,23 @@ void MainWindow::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, 
         case 0: _t->onConnectClicked(); break;
         case 1: _t->onRefreshPortsClicked(); break;
         case 2: _t->onLogClicked(); break;
-        case 3: _t->onClearPlotsClicked(); break;
-        case 4: _t->onWindowSecChanged((*reinterpret_cast<std::add_pointer_t<int>>(_a[1]))); break;
-        case 5: _t->onPowerEnableClicked(); break;
-        case 6: _t->onPowerDisableClicked(); break;
-        case 7: _t->onPowerCommandSent((*reinterpret_cast<std::add_pointer_t<bool>>(_a[1]))); break;
-        case 8: _t->onMeasurementUpdated((*reinterpret_cast<std::add_pointer_t<MeasurementPacket>>(_a[1]))); break;
-        case 9: _t->onSystemStatusUpdated((*reinterpret_cast<std::add_pointer_t<SystemStatus>>(_a[1]))); break;
-        case 10: _t->onConnectionStateChanged((*reinterpret_cast<std::add_pointer_t<bool>>(_a[1]))); break;
-        case 11: _t->onCommunicationStatsChanged(); break;
-        case 12: _t->onLinkStaleChanged((*reinterpret_cast<std::add_pointer_t<bool>>(_a[1]))); break;
-        case 13: _t->onErrorOccurred((*reinterpret_cast<std::add_pointer_t<QString>>(_a[1]))); break;
-        case 14: _t->onLoggingStateChanged((*reinterpret_cast<std::add_pointer_t<bool>>(_a[1]))); break;
+        case 3: _t->onPowerEnableClicked(); break;
+        case 4: _t->onPowerDisableClicked(); break;
+        case 5: _t->onPowerCommandSent((*reinterpret_cast<std::add_pointer_t<bool>>(_a[1]))); break;
+        case 6: _t->onLimitAckReceived((*reinterpret_cast<std::add_pointer_t<LimitAck>>(_a[1]))); break;
+        case 7: _t->onSetLimitsRequested((*reinterpret_cast<std::add_pointer_t<int>>(_a[1])),(*reinterpret_cast<std::add_pointer_t<double>>(_a[2])),(*reinterpret_cast<std::add_pointer_t<double>>(_a[3])),(*reinterpret_cast<std::add_pointer_t<double>>(_a[4]))); break;
+        case 8: _t->onGetLimitsRequested((*reinterpret_cast<std::add_pointer_t<int>>(_a[1]))); break;
+        case 9: _t->onClearFaultsClicked(); break;
+        case 10: _t->onClearPlotsClicked(); break;
+        case 11: _t->onWindowSecChanged((*reinterpret_cast<std::add_pointer_t<int>>(_a[1]))); break;
+        case 12: _t->onMeasurementUpdated((*reinterpret_cast<std::add_pointer_t<MeasurementPacket>>(_a[1]))); break;
+        case 13: _t->onSystemStatusUpdated((*reinterpret_cast<std::add_pointer_t<SystemStatus>>(_a[1]))); break;
+        case 14: _t->onSafetyStatusUpdated((*reinterpret_cast<std::add_pointer_t<StatusPacket>>(_a[1]))); break;
+        case 15: _t->onConnectionStateChanged((*reinterpret_cast<std::add_pointer_t<bool>>(_a[1]))); break;
+        case 16: _t->onCommunicationStatsChanged(); break;
+        case 17: _t->onLinkStaleChanged((*reinterpret_cast<std::add_pointer_t<bool>>(_a[1]))); break;
+        case 18: _t->onLoggingStateChanged((*reinterpret_cast<std::add_pointer_t<bool>>(_a[1]))); break;
+        case 19: _t->onErrorOccurred((*reinterpret_cast<std::add_pointer_t<QString>>(_a[1]))); break;
         default: ;
         }
     }
@@ -176,14 +211,14 @@ int MainWindow::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 15)
+        if (_id < 20)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 15;
+        _id -= 20;
     }
     if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 15)
+        if (_id < 20)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 15;
+        _id -= 20;
     }
     return _id;
 }

@@ -16,6 +16,7 @@ extern UART_HandleTypeDef huart4;   /* FT232,  CTS# = PA2, RTS# = PA3  */
  * 2.5 chu ky bat duoc trong 2 khung, van du dung sai cho mot lan quet truot. */
 #define TLM_FRESH_MS   150u
 
+#define TLM_CFG_ACK_TIMEOUT_MS   200u
 /* ==========================================================================
  * BUFFER
  * ========================================================================== */
@@ -60,9 +61,6 @@ typedef struct {
 
 static rx_port_t s_rx[TLM_PORT_COUNT];
 
-_Static_assert((TLM_RX_BUF_SZ % 32u) == 0u,
-               "TLM_RX_BUF_SZ phai la boi 32 de giu align DMA cho tung cong");
-
 /* ==========================================================================
  * CONG PHAT
  * ========================================================================== */
@@ -79,7 +77,10 @@ typedef struct {
 } tlm_port_t;
 
 typedef struct {
-    volatile bool pending;
+    volatile bool pending;   /* co yeu cau tu PC chua xu ly xong      */
+    bool     executed;       /* da thuc thi I2C + luu flash (1 lan)    */
+    uint8_t  status;         /* ket qua thuc thi, gui trong ACK        */
+    uint32_t t_done;         /* thoi diem thuc thi xong                */
     uint8_t  port;
     uint8_t  ch;
     bool     read_only;
@@ -377,13 +378,15 @@ static void rx_exec(uint8_t p, const uint8_t *f, uint16_t n)
         s_cfg_req.sovl_a    = get_be_f32(&f[TLM_CFG_OFF_SOVL]);
         s_cfg_req.bovl_v    = get_be_f32(&f[TLM_CFG_OFF_BOVL]);
         s_cfg_req.buvl_v    = get_be_f32(&f[TLM_CFG_OFF_BUVL]);
-        s_cfg_req.pending   = true;      /* ghi cuoi cung: barrier tu nhien */
+        s_cfg_req.executed	= false;
+        s_cfg_req.pending   = true;
         break;
 
     case TLM_CMD_GET_LIMIT:
         s_cfg_req.port      = p;
         s_cfg_req.ch        = f[TLM_RX_OFF_CTRL];
         s_cfg_req.read_only = true;
+        s_cfg_req.executed	= false;
         s_cfg_req.pending   = true;
         break;
 
@@ -694,9 +697,10 @@ static bool fw_send_info(int port)
     return (tlm_send_aux(f, TLM_AUX_FRAME_SZ, port) > 0u);
 }
 
-static void cfg_persist_limits(void)
+static bool cfg_persist_limits(void)
 {
     cfg_limits_payload_t p;
+    memset(&p, 0, sizeof(p));
 
     for (uint8_t i = 0; i < INA228_CH_COUNT; i++) {
         const ina228_dev_t *d = ina228_get_dev(i);
@@ -705,36 +709,52 @@ static void cfg_persist_limits(void)
         p.buvl[i] = d ? d->limits.buvl : 0u;
     }
 
-    (void)CfgStore_WriteLimits(&p);
+    /* Gia tri trung ban da luu -> khong ghi, tiet kiem flash */
+    cfg_limits_payload_t old;
+    if (CfgStore_ReadLimits(&old) && (memcmp(&old, &p, sizeof(p)) == 0)) {
+        return true;
+    }
+
+    return CfgStore_WriteLimits(&p);
 }
 
 void Comm_CfgTask(void)
 {
-	if (FwUpdate_IsBusy()) return;
-
+    if (FwUpdate_IsBusy()) return;
     if (!s_cfg_req.pending) return;
-    if (ina228_bus_state() != INA228_BUS_IDLE) return;
 
-    cfg_req_t req = s_cfg_req;
+    /* ---- Pha 1: THUC THI - dung 1 lan cho moi lenh ---- */
+    if (!s_cfg_req.executed) {
+        if (ina228_bus_state() != INA228_BUS_IDLE) return;
 
-    ina228_dev_t *d = (req.ch < INA228_CH_COUNT) ? ina228_get_dev(req.ch) : NULL;
-    uint8_t st;
+        const cfg_req_t req = s_cfg_req;
+        ina228_dev_t *d = (req.ch < INA228_CH_COUNT) ? ina228_get_dev(req.ch) : NULL;
+        uint8_t st;
 
-    if (d == NULL) {
-        st = (req.ch < INA228_CH_COUNT) ? TLM_ACK_NO_DEV : TLM_ACK_PARAM;
-    } else if (req.read_only) {
-        st = (ina228_read_limits(d) == INA228_OK) ? TLM_ACK_OK : TLM_ACK_I2C_ERR;
-    } else {
-        st = (ina228_set_limits_f(d, req.sovl_a, req.bovl_v, req.buvl_v)
-              == INA228_OK) ? TLM_ACK_OK : TLM_ACK_I2C_ERR;
+        if (d == NULL) {
+            st = (req.ch < INA228_CH_COUNT) ? TLM_ACK_NO_DEV : TLM_ACK_PARAM;
+        } else if (req.read_only) {
+            st = (ina228_read_limits(d) == INA228_OK) ? TLM_ACK_OK : TLM_ACK_I2C_ERR;
+        } else {
+            st = (ina228_set_limits_f(d, req.sovl_a, req.bovl_v, req.buvl_v)
+                  == INA228_OK) ? TLM_ACK_OK : TLM_ACK_I2C_ERR;
 
-        if (st == TLM_ACK_OK) {
-            cfg_persist_limits();
+            if (st == TLM_ACK_OK) {
+                (void)cfg_persist_limits();
+            }
         }
+
+        s_cfg_req.status   = st;
+        s_cfg_req.t_done   = HAL_GetTick();
+        s_cfg_req.executed = true;
     }
 
-    if (cfg_send_ack(req.port, req.ch, st, d)) {
-        s_cfg_req.pending = false;        /* <-- chi xoa khi ACK da di */
+    /* ---- Pha 2: CHI gui lai ACK - khong I2C, khong flash ---- */
+    ina228_dev_t *d = (s_cfg_req.ch < INA228_CH_COUNT) ? ina228_get_dev(s_cfg_req.ch) : NULL;
+
+    if (cfg_send_ack(s_cfg_req.port, s_cfg_req.ch, s_cfg_req.status, d) ||
+        ((uint32_t)(HAL_GetTick() - s_cfg_req.t_done) >= TLM_CFG_ACK_TIMEOUT_MS)) {
+        s_cfg_req.pending = false;
     }
 }
 

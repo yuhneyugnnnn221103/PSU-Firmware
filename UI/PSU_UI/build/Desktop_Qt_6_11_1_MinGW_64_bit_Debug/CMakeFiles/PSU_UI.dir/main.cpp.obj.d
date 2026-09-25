@@ -397,8 +397,14 @@ CMakeFiles/PSU_UI.dir/main.cpp.obj: D:\AESA\PSU\code\UI\PSU_UI\main.cpp \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qelapsedtimer.h \
  D:\AESA\PSU\code\UI\PSU_UI\ina228_data.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/QtGlobal \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/QDateTime \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qdatetime.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qcalendar.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qlocale.h \
  D:\AESA\PSU\code\UI\PSU_UI\protocol.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/QByteArray \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/QString \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/QStringList \
  D:\AESA\PSU\code\UI\PSU_UI\packet_parser.h \
  D:\AESA\PSU\code\UI\PSU_UI\serial_manager.h \
  D:/Qt/6.11.1/mingw_64/include/QtSerialPort/QSerialPort \
@@ -412,7 +418,6 @@ CMakeFiles/PSU_UI.dir/main.cpp.obj: D:\AESA\PSU\code\UI\PSU_UI\main.cpp \
  D:/Qt/6.11.1/mingw_64/include/QtCore/QVector \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qvector.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/QPair \
- D:/Qt/6.11.1/mingw_64/include/QtCore/QString \
  D:\AESA\PSU\code\UI\PSU_UI\ina228_widget.h \
  D:/Qt/6.11.1/mingw_64/include/QtWidgets/QWidget \
  D:\AESA\PSU\code\UI\PSU_UI\custom_plot.h \
@@ -461,5 +466,4 @@ CMakeFiles/PSU_UI.dir/main.cpp.obj: D:\AESA\PSU\code\UI\PSU_UI\main.cpp \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qcoreapplication_platform.h \
  D:/Qt/6.11.1/mingw_64/include/QtGui/qguiapplication.h \
  D:/Qt/6.11.1/mingw_64/include/QtGui/qinputmethod.h \
- D:/Qt/6.11.1/mingw_64/include/QtCore/qlocale.h \
  D:/Qt/6.11.1/mingw_64/include/QtGui/qguiapplication_platform.h

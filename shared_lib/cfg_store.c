@@ -3,19 +3,23 @@
 
 #include "flash.h"
 #include "cfg_store.h"
-#include "crc16_ccitt.h"
+#include "crc32_sw.h"
 
 static inline const cfg_record_t *rec_at(uint32_t idx)
 {
     return (const cfg_record_t *)(OTA_CFG_BASE + idx * CFG_REC_SIZE);
 }
 
+static uint32_t rec_crc(const cfg_record_t *r)
+{
+    return Crc32_Compute((const uint8_t *)r, (uint32_t)offsetof(cfg_record_t, crc32));
+}
+
 static bool rec_is_valid(const cfg_record_t *r)
 {
-    if (r->magic != CFG_REC_MAGIC) return false;
-    const uint16_t calc = Crc16_Compute((const uint8_t *)r,
-                                     (uint32_t)offsetof(cfg_record_t, crc16));
-    return calc == r->crc16;
+    if (r->magic != CFG_REC_MAGIC)  return false;
+    if (r->len > CFG_PAYLOAD_MAX)   return false;
+    return r->crc32 == rec_crc(r);
 }
 
 /* ==========================================================================
@@ -36,18 +40,20 @@ static struct {
 static bool write_record(uint8_t type, const void *payload, uint8_t payload_len);
 static bool compact(void);
 
-static void cache_apply(uint8_t type, const void *payload)
+static void cache_apply(uint8_t type, const void *payload, uint8_t len)
 {
     if (type == CFG_REC_TYPE_LIMITS) {
+        if (len != sizeof(cfg_limits_payload_t)) return;
         memcpy(&s.limits, payload, sizeof(s.limits));
         s.has_limits = true;
     } else if (type == CFG_REC_TYPE_BOOT) {
+        if (len != sizeof(cfg_boot_payload_t)) return;
         cfg_boot_payload_t bp;
         memcpy(&bp, payload, sizeof(bp));
         const ota_slot_t sl = Ota_SlotFromTag((char)bp.slot);
         if (Ota_SlotValid(sl)) {
-        	s.boot[sl] = bp;
-        	s.has_boot[sl] = true;
+            s.boot[sl]     = bp;
+            s.has_boot[sl] = true;
         }
     }
 }
@@ -92,39 +98,44 @@ void CfgStore_Init(void)
         if (!rec_is_valid(r)) continue;
 
         if (r->seq > s.max_seq) s.max_seq = r->seq;
-        cache_apply(r->type, r->payload);
+        cache_apply(r->type, r->payload, r->len);
     }
 }
 
-static bool write_record(uint8_t type, const void *payload, uint8_t payload_len)
+static bool write_record(uint8_t type, const void *payload, uint8_t len)
 {
-    if (s.next_free_idx >= CFG_REC_COUNT) {
-        if (!compact()) return false;   /* nen that bai (loi xoa) - khong con cach nao khac */
+    if (len > CFG_PAYLOAD_MAX) return false;
+
+    /* Toi da 2 lan: o dau loi thi bo qua, thu o ke tiep */
+    for (uint8_t attempt = 0; attempt < 2u; attempt++) {
+        if (s.next_free_idx >= CFG_REC_COUNT) {
+            if (!compact()) return false;
+        }
+
+        cfg_record_t rec __attribute__((aligned(32)));
+        memset(&rec, 0, sizeof(rec));
+        rec.magic = CFG_REC_MAGIC;
+        rec.seq   = ++s.max_seq;
+        rec.type  = type;
+        rec.len   = len;
+        memcpy(rec.payload, payload, len);
+        rec.crc32 = rec_crc(&rec);
+
+        /* Tang idx TRUOC khi ghi: du ghi loi, o nay cung KHONG bao gio
+         * duoc dung lai (H7 khong cho ghi de flash-word da lap trinh). */
+        const uint32_t idx = s.next_free_idx++;
+
+        const flash_op_result_t r =
+            Flash_ProgramWords(OTA_CFG_BASE + idx * CFG_REC_SIZE,
+                               (const uint8_t *)&rec, CFG_REC_SIZE);
+
+        /* Doc lai tu flash de xac nhan, khong tin moi ket qua HAL */
+        if (r.ok && rec_is_valid(rec_at(idx))) {
+            cache_apply(type, payload, len);
+            return true;
+        }
     }
-
-    cfg_record_t rec;
-    memset(&rec, 0xFF, sizeof(rec));    /* dem phan chua dung bang mau xoa */
-    rec.magic = CFG_REC_MAGIC;
-    rec.seq   = ++s.max_seq;
-    rec.type  = type;
-    memset(rec.payload, 0, sizeof(rec.payload));
-    memcpy(rec.payload, payload, payload_len);
-    rec.crc16 = Crc16_Compute((const uint8_t *)&rec,
-                           (uint32_t)offsetof(cfg_record_t, crc16));
-
-    uint8_t buf[CFG_REC_SIZE] __attribute__((aligned(32)));
-    memset(buf, 0xFF, sizeof(buf));
-    memcpy(buf, &rec, sizeof(rec));
-
-    const uint32_t addr = OTA_CFG_BASE + s.next_free_idx * CFG_REC_SIZE;
-
-    flash_op_result_t r = Flash_ProgramWords(addr, buf, CFG_REC_SIZE);
-    if (!r.ok) return false;
-
-    s.next_free_idx++;
-    cache_apply(type, payload);
-
-    return true;
+    return false;
 }
 
 /* ==========================================================================

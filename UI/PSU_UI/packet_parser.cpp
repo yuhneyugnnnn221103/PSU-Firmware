@@ -1,9 +1,7 @@
 #include "packet_parser.h"
-#include "protocol.h"
 
 namespace {
 
-/* Ghép big-endian, tối đa 8 byte */
 quint64 readBE(const QByteArray &d, int off, int size)
 {
     quint64 v = 0;
@@ -14,29 +12,14 @@ quint64 readBE(const QByteArray &d, int off, int size)
     return v;
 }
 
-/* Giải mã 1 trường: ghép BE -> mở rộng dấu theo size -> nhân LSB.
- *
- * Firmware đã sign-extend và dịch bit sẵn, nên ở đây chỉ cần diễn giải
- * `size` byte như một số nguyên có/không dấu đúng bề rộng đó. */
-double decodeField(const QByteArray &f, int base,
-                   const Protocol::Field &fd, double lsb)
+qint32 readBE32Signed(const QByteArray &d, int off)
 {
-    const quint64 raw = readBE(f, base + fd.offset, fd.size);
+    return static_cast<qint32>(static_cast<quint32>(readBE(d, off, 4)));
+}
 
-    if (!fd.isSigned)
-        return static_cast<double>(raw) * lsb;
-
-    if (fd.size >= 8)
-        return static_cast<double>(static_cast<qint64>(raw)) * lsb;
-
-    const int      bits    = fd.size * 8;
-    const quint64  signBit = 1ULL << (bits - 1);
-
-    const qint64 s = (raw & signBit)
-                         ? static_cast<qint64>(raw) - static_cast<qint64>(signBit << 1)
-                         : static_cast<qint64>(raw);
-
-    return static_cast<double>(s) * lsb;
+quint16 readBE16(const QByteArray &d, int off)
+{
+    return static_cast<quint16>(readBE(d, off, 2));
 }
 
 } // namespace
@@ -56,22 +39,16 @@ void Packet_Parser::processData(const QByteArray &data)
 {
     m_buffer.append(data);
 
-    /* Chặn buffer phình vô hạn khi nhận toàn rác */
     if (m_buffer.size() > MAX_BUFFER)
     {
-        m_droppedBytes += static_cast<quint64>(m_buffer.size() - Protocol::FRAME_SIZE);
-        m_buffer = m_buffer.right(Protocol::FRAME_SIZE);
+        m_droppedBytes += static_cast<quint64>(m_buffer.size() - Protocol::TLM_FRAME_SIZE);
+        m_buffer = m_buffer.right(Protocol::TLM_FRAME_SIZE);
     }
 
     QByteArray frame;
 
     while (findFrame(frame))
-    {
-        MeasurementPacket packet;
-
-        if (parseFrame(frame, packet))
-            emit packetReceived(packet);
-    }
+        dispatch(frame);
 }
 
 bool Packet_Parser::findFrame(QByteArray &frame)
@@ -80,14 +57,14 @@ bool Packet_Parser::findFrame(QByteArray &frame)
         QByteArray(1, static_cast<char>(Protocol::HEADER1)) +
         QByteArray(1, static_cast<char>(Protocol::HEADER2));
 
-    while (m_buffer.size() >= Protocol::FRAME_SIZE)
+    /* Can toi thieu 3 byte moi doc duoc CMD de biet do dai khung. */
+    while (m_buffer.size() >= 3)
     {
         const int idx = m_buffer.indexOf(header);
 
         if (idx < 0)
         {
-            /* Không có header. Giữ lại 1 byte cuối vì nó có thể là HEADER1
-             * của một khung bị cắt giữa hai lần readyRead(). */
+            /* Giu 1 byte cuoi: co the la HEADER1 cua khung bi cat. */
             m_droppedBytes += static_cast<quint64>(m_buffer.size() - 1);
             m_buffer = m_buffer.right(1);
             return false;
@@ -99,112 +76,138 @@ bool Packet_Parser::findFrame(QByteArray &frame)
             m_buffer.remove(0, idx);
         }
 
-        if (m_buffer.size() < Protocol::FRAME_SIZE)
-            return false;                       /* chờ thêm byte */
+        if (m_buffer.size() < 3)
+            return false;
 
-        const bool tailerOk =
-            static_cast<quint8>(m_buffer[Protocol::TAILER_OFFSET])     == Protocol::TAILER1 &&
-            static_cast<quint8>(m_buffer[Protocol::TAILER_OFFSET + 1]) == Protocol::TAILER2;
+        const quint8 cmd = static_cast<quint8>(m_buffer[2]);
+        const int    len = Protocol::frameLengthForCmd(cmd);
 
-        if (!tailerOk)
+        if (len == 0)
         {
-            /* Header giả. Bỏ đúng 1 byte để không nuốt mất header thật
-             * có thể bắt đầu ngay byte kế tiếp. */
+            /* CMD khong thuoc chieu STM -> PC: header gia. Bo 1 byte. */
             m_buffer.remove(0, 1);
             ++m_droppedBytes;
             emit frameError();
             continue;
         }
 
-        frame = m_buffer.left(Protocol::FRAME_SIZE);
-        m_buffer.remove(0, Protocol::FRAME_SIZE);
+        if (m_buffer.size() < len)
+            return false;                       /* cho them byte */
+
+        const bool tailerOk =
+            static_cast<quint8>(m_buffer[len - 2]) == Protocol::TAILER1 &&
+            static_cast<quint8>(m_buffer[len - 1]) == Protocol::TAILER2;
+
+        if (!tailerOk)
+        {
+            m_buffer.remove(0, 1);
+            ++m_droppedBytes;
+            emit frameError();
+            continue;
+        }
+
+        frame = m_buffer.left(len);
+        m_buffer.remove(0, len);
         return true;
     }
 
-    /* Còn ít hơn 1 khung: nếu đã có header ở đầu thì giữ nguyên chờ thêm */
     return false;
 }
 
-void Packet_Parser::parseStatus(quint8 status, SystemStatus &out)
+void Packet_Parser::dispatch(const QByteArray &frame)
 {
-    out.raw = status;
+    const int len    = frame.size();
+    const int crcOff = len - 4;
 
-    for (int i = 0; i < Protocol::IC_COUNT; ++i)
+    const quint16 receivedCrc = readBE16(frame, crcOff);
+
+    if (!(receivedCrc == 0 && Protocol::ACCEPT_ZERO_CRC))
     {
-        out.fresh[i] = status & (1u << i);
-        out.fault[i] = status & (1u << (i + Protocol::FT_FAULT_SHIFT));
+        const quint16 calc = Protocol::crc16Ccitt(frame, 2, crcOff - 2);
+
+        if (calc != receivedCrc)
+        {
+            emit crcError();
+            return;
+        }
+    }
+
+    switch (static_cast<quint8>(frame[2]))
+    {
+    case Protocol::CMD_TELEMETRY: parseTelemetry(frame); break;
+    case Protocol::CMD_LIMIT_ACK: parseLimitAck(frame);  break;
+    case Protocol::CMD_STATUS:    parseStatus(frame);    break;
+    default:                      emit frameError();     break;
     }
 }
 
-bool Packet_Parser::parseFrame(const QByteArray &frame, MeasurementPacket &packet)
+void Packet_Parser::parseTelemetry(const QByteArray &frame)
 {
-    /* Header/tailer đã được findFrame() kiểm tra, không lặp lại. */
+    MeasurementPacket packet;
 
-    const quint8 cmd = static_cast<quint8>(frame[Protocol::CMD_OFFSET]);
+    packet.cmd = Protocol::CMD_TELEMETRY;
+    packet.crc = readBE16(frame, frame.size() - 4);
 
-    if (cmd != Protocol::CMD_MONITOR)
-    {
-        emit frameError();
-        return false;
-    }
+    const quint8 status = static_cast<quint8>(frame[Protocol::STATUS_OFFSET]);
 
-    const quint8 b0 = static_cast<quint8>(frame[Protocol::CRC_OFFSET]);
-    const quint8 b1 = static_cast<quint8>(frame[Protocol::CRC_OFFSET + 1]);
-
-    const quint16 receivedCrc = Protocol::CRC_BIG_ENDIAN
-                                    ? static_cast<quint16>((b0 << 8) | b1)
-                                    : static_cast<quint16>((b1 << 8) | b0);
-
-    bool crcOk = true;
-
-    if (receivedCrc == 0 && Protocol::ACCEPT_ZERO_CRC)
-    {
-        crcOk = true;                          /* firmware bring-up: CRC = 0 */
-    }
-    else
-    {
-        const quint16 calc = Protocol::crc16Ccitt(frame,
-                                                  Protocol::CRC_START,
-                                                  Protocol::CRC_LENGTH);
-        crcOk = (calc == receivedCrc);
-    }
-
-    if (!crcOk)
-    {
-        emit crcError();
-        return false;
-    }
-
-    packet = MeasurementPacket{};
-    packet.cmd      = cmd;
-    packet.crc      = receivedCrc;
-    packet.crcValid = crcOk;
-
-    parseStatus(static_cast<quint8>(frame[Protocol::STATUS_OFFSET]), packet.status);
+    packet.status.raw = status;
 
     for (int i = 0; i < Protocol::IC_COUNT; ++i)
     {
-        const int base = Protocol::IC1_OFFSET + i * Protocol::IC_SIZE;
+        packet.status.fresh[i] = status & (1u << i);
+        packet.status.fault[i] =
+            status & (1u << (i + Protocol::ST_DCM_FAULT_SHIFT));
 
-        parseIna228(frame, base, packet.ic[i]);
+        const int base = Protocol::TLM_PAYLOAD_OFF + i * Protocol::TLM_BLOCK_SIZE;
 
-        /* Bit fresh trong byte status là căn cứ cuối cùng về tính hợp lệ */
-        packet.ic[i].valid = packet.status.fresh[i];
+        Ina228Data &d = packet.ic[i];
+
+        d.current = static_cast<double>(
+                        readBE32Signed(frame, base + Protocol::OFF_CURRENT))
+                    * Protocol::CURRENT_LSB_A;
+
+        d.vbus = static_cast<double>(readBE(frame, base + Protocol::OFF_VBUS, 4))
+                 * Protocol::VBUS_LSB_V;
+
+        d.temperature = static_cast<double>(
+                            static_cast<qint16>(
+                                readBE16(frame, base + Protocol::OFF_DIETEMP)))
+                        * Protocol::TEMP_LSB_C;
+
+        d.diag  = readBE16(frame, base + Protocol::OFF_DIAG);
+        d.valid = packet.status.fresh[i];
     }
 
     packet.valid = true;
-    return true;
+
+    emit packetReceived(packet);
 }
 
-void Packet_Parser::parseIna228(const QByteArray &frame, int base, Ina228Data &data) const
+void Packet_Parser::parseLimitAck(const QByteArray &frame)
 {
-    using namespace Protocol;
+    LimitAck ack;
 
-    data.current     = decodeField(frame, base, F_CURRENT, CURRENT_LSB_A);
-    data.vbus        = decodeField(frame, base, F_VBUS,    VBUS_LSB_V);
-    data.temperature = decodeField(frame, base, F_TEMP,    TEMP_LSB_C);
-    // data.power       = decodeField(frame, base, F_POWER,   POWER_LSB_W);
-    // data.vshunt      = decodeField(frame, base, F_VSHUNT,  VSHUNT_LSB_V);
-    // data.energy      = decodeField(frame, base, F_ENERGY,  ENERGY_LSB_J);
-    // data.charge      = decodeField(frame, base, F_CHARGE,  CHARGE_LSB_C);
+    ack.channel = static_cast<quint8>(frame[Protocol::ACK_OFF_CH]);
+    ack.status  = static_cast<quint8>(frame[Protocol::ACK_OFF_STATUS]);
+
+    ack.sovlRaw = readBE16(frame, Protocol::ACK_OFF_SOVL);
+    ack.bovlRaw = readBE16(frame, Protocol::ACK_OFF_BOVL);
+    ack.buvlRaw = readBE16(frame, Protocol::ACK_OFF_BUVL);
+
+    emit limitAckReceived(ack);
+}
+
+void Packet_Parser::parseStatus(const QByteArray &frame)
+{
+    StatusPacket st;
+
+    st.raw       = static_cast<quint8>(frame[Protocol::STS_OFF_STATE]);
+    st.tripMask  = static_cast<quint8>(frame[Protocol::STS_OFF_TRIPMASK]);
+    st.dcmRaw    = static_cast<quint8>(frame[Protocol::STS_OFF_DCM]);
+    st.freshMask = static_cast<quint8>(frame[Protocol::STS_OFF_FRESH]);
+    st.cfgOkMask = static_cast<quint8>(frame[Protocol::STS_OFF_CFGOK]);
+    st.pwrOn     = static_cast<quint8>(frame[Protocol::STS_OFF_PWR]) != 0;
+    st.tripCount = static_cast<quint8>(frame[Protocol::STS_OFF_TRIPCNT]);
+
+    emit statusReceived(st);
 }

@@ -11,7 +11,7 @@
 
 #define OTA_BOOT_SECTOR		0u
 #define OTA_SLOTA_SECTOR	1u
-#define OTA_SLOTB_SECTOR	5u
+#define OTA_SLOTB_SECTOR	4u
 #define OTA_SLOT_SECTORS	3u
 #define OTA_CFG_SECTOR		7u
 

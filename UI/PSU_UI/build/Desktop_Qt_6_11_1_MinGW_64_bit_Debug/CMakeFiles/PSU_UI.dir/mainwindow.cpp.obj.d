@@ -398,8 +398,14 @@ CMakeFiles/PSU_UI.dir/mainwindow.cpp.obj: \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qelapsedtimer.h \
  D:\AESA\PSU\code\UI\PSU_UI\ina228_data.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/QtGlobal \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/QDateTime \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qdatetime.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qcalendar.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qlocale.h \
  D:\AESA\PSU\code\UI\PSU_UI\protocol.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/QByteArray \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/QString \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/QStringList \
  D:\AESA\PSU\code\UI\PSU_UI\packet_parser.h \
  D:\AESA\PSU\code\UI\PSU_UI\serial_manager.h \
  D:/Qt/6.11.1/mingw_64/include/QtSerialPort/QSerialPort \
@@ -413,7 +419,6 @@ CMakeFiles/PSU_UI.dir/mainwindow.cpp.obj: \
  D:/Qt/6.11.1/mingw_64/include/QtCore/QVector \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qvector.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/QPair \
- D:/Qt/6.11.1/mingw_64/include/QtCore/QString \
  D:\AESA\PSU\code\UI\PSU_UI\ina228_widget.h \
  D:/Qt/6.11.1/mingw_64/include/QtWidgets/QWidget \
  D:\AESA\PSU\code\UI\PSU_UI\custom_plot.h \
@@ -458,7 +463,6 @@ CMakeFiles/PSU_UI.dir/mainwindow.cpp.obj: \
  D:/Qt/6.11.1/mingw_64/include/QtWidgets/qcombobox.h \
  D:/Qt/6.11.1/mingw_64/include/QtWidgets/qabstractitemdelegate.h \
  D:/Qt/6.11.1/mingw_64/include/QtWidgets/qstyleoption.h \
- D:/Qt/6.11.1/mingw_64/include/QtCore/qlocale.h \
  D:/Qt/6.11.1/mingw_64/include/QtWidgets/qabstractspinbox.h \
  D:/Qt/6.11.1/mingw_64/include/QtGui/qvalidator.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qregularexpression.h \
@@ -494,8 +498,6 @@ CMakeFiles/PSU_UI.dir/mainwindow.cpp.obj: \
  D:/Qt/6.11.1/mingw_64/include/QtWidgets/qfiledialog.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qdir.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qdirlisting.h \
- D:/Qt/6.11.1/mingw_64/include/QtCore/qdatetime.h \
- D:/Qt/6.11.1/mingw_64/include/QtCore/qcalendar.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qfileinfo.h \
  D:/Qt/6.11.1/mingw_64/include/QtCore/qtimezone.h \
  D:/Qt/6.11.1/mingw_64/include/QtWidgets/qdialog.h \
@@ -504,4 +506,38 @@ CMakeFiles/PSU_UI.dir/mainwindow.cpp.obj: \
  D:/Qt/6.11.1/mingw_64/include/QtCore/QDir \
  D:/Qt/6.11.1/mingw_64/include/QtWidgets/QMessageBox \
  D:/Qt/6.11.1/mingw_64/include/QtWidgets/qmessagebox.h \
- D:/Qt/6.11.1/mingw_64/include/QtWidgets/qdialogbuttonbox.h
+ D:/Qt/6.11.1/mingw_64/include/QtWidgets/qdialogbuttonbox.h \
+ D:/Qt/6.11.1/mingw_64/include/QtWidgets/QPlainTextEdit \
+ D:/Qt/6.11.1/mingw_64/include/QtWidgets/qplaintextedit.h \
+ D:/Qt/6.11.1/mingw_64/include/QtWidgets/qtextedit.h \
+ D:/Qt/6.11.1/mingw_64/include/QtWidgets/qabstractscrollarea.h \
+ D:/Qt/6.11.1/mingw_64/include/QtGui/qtextoption.h \
+ D:/Qt/6.11.1/mingw_64/include/QtGui/qtextcursor.h \
+ D:/Qt/6.11.1/mingw_64/include/QtGui/qtextformat.h \
+ D:/Qt/6.11.1/mingw_64/include/QtGui/qpen.h \
+ D:/Qt/6.11.1/mingw_64/include/QtGui/qabstracttextdocumentlayout.h \
+ D:/Qt/6.11.1/mingw_64/include/QtGui/qtextlayout.h \
+ D:/Qt/6.11.1/mingw_64/include/QtGui/qevent.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qcoreevent.h \
+ D:/Qt/6.11.1/mingw_64/include/QtGui/qeventpoint.h \
+ D:/Qt/6.11.1/mingw_64/include/QtGui/qvector2d.h \
+ D:/Qt/6.11.1/mingw_64/include/QtGui/qvectornd.h \
+ D:/Qt/6.11.1/mingw_64/include/QtGui/qpointingdevice.h \
+ D:/Qt/6.11.1/mingw_64/include/QtGui/qinputdevice.h \
+ D:/Qt/6.11.1/mingw_64/include/QtGui/qscreen.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/QList \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/QObject \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/QRect \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/QSize \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/QSizeF \
+ D:/Qt/6.11.1/mingw_64/include/QtGui/QTransform \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qnativeinterface.h \
+ D:/Qt/6.11.1/mingw_64/include/QtGui/qscreen_platform.h \
+ D:/Qt/6.11.1/mingw_64/include/QtGui/qguiapplication.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qcoreapplication.h \
+ D:/Qt/6.11.1/mingw_64/include/QtCore/qcoreapplication_platform.h \
+ D:/Qt/6.11.1/mingw_64/include/QtGui/qinputmethod.h \
+ D:/Qt/6.11.1/mingw_64/include/QtGui/qguiapplication_platform.h \
+ D:/Qt/6.11.1/mingw_64/include/QtGui/qglyphrun.h \
+ D:/Qt/6.11.1/mingw_64/include/QtGui/qrawfont.h \
+ D:/Qt/6.11.1/mingw_64/include/QtGui/qfontdatabase.h

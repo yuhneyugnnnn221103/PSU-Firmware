@@ -6,20 +6,20 @@
 
 namespace {
 
-/* Số thực dạng locale C, 5 chữ số có nghĩa. */
+/* Số thực dạng locale C, 9 chữ số có nghĩa. */
 inline QString num(double v)
 {
-    return QString::number(v, 'g', 5);
+    return QString::number(v, 'g', 9);
 }
 
 } // namespace
 
-CSV_Logger::CSV_Logger(QObject *parent)
+Csv_Logger::Csv_Logger(QObject *parent)
     : QObject{parent}
 {
 }
 
-CSV_Logger::~CSV_Logger()
+Csv_Logger::~Csv_Logger()
 {
     if (m_file.isOpen())
     {
@@ -28,13 +28,13 @@ CSV_Logger::~CSV_Logger()
     }
 }
 
-QString CSV_Logger::suggestedFileName()
+QString Csv_Logger::suggestedFileName()
 {
-    return QStringLiteral("ina228_log_%1.csv")
+    return QStringLiteral("ina228_log_%1.xlsx")
     .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss")));
 }
 
-bool CSV_Logger::start(const QString &filePath)
+bool Csv_Logger::start(const QString &filePath)
 {
     if (m_file.isOpen())
         stop();
@@ -61,7 +61,7 @@ bool CSV_Logger::start(const QString &filePath)
     return true;
 }
 
-void CSV_Logger::stop()
+void Csv_Logger::stop()
 {
     if (!m_file.isOpen())
         return;
@@ -72,7 +72,7 @@ void CSV_Logger::stop()
     emit loggingStateChanged(false);
 }
 
-void CSV_Logger::writeHeader()
+void Csv_Logger::writeHeader()
 {
     m_stream << "timestamp,elapsed_s,status_raw";
 
@@ -82,17 +82,15 @@ void CSV_Logger::writeHeader()
                  << ",ic" << i << "_fault"
                  << ",ic" << i << "_current_A"
                  << ",ic" << i << "_vbus_V"
-                 // << ",ic" << i << "_vshunt_V"
-                 // << ",ic" << i << "_power_W"
-                 << ",ic" << i << "_temp_C";
-                 // << ",ic" << i << "_energy_J"
-                 // << ",ic" << i << "_charge_C";
+                 << ",ic" << i << "_temp_C"
+                 << ",ic" << i << "_diag_hex"
+                 << ",ic" << i << "_faults";
     }
 
     m_stream << '\n';
 }
 
-void CSV_Logger::logPacket(const MeasurementPacket &packet)
+void Csv_Logger::logPacket(const MeasurementPacket &packet)
 {
     if (!m_file.isOpen() || !packet.valid)
         return;
@@ -112,17 +110,15 @@ void CSV_Logger::logPacket(const MeasurementPacket &packet)
          * không nhầm dữ liệu treo thành dữ liệu thật. */
         if (!d.valid)
         {
-            m_stream << ",,,,,,";
+            m_stream << ",,,,";
         }
         else
         {
             m_stream << ',' << num(d.current)
             << ',' << num(d.vbus)
-            // << ',' << num(d.vshunt)
-            // << ',' << num(d.power)
-             << ',' << num(d.temperature);
-            // << ',' << num(d.energy)
-            // << ',' << num(d.charge);
+            << ',' << num(d.temperature)
+            << ",0x" << QString::number(d.diag, 16).rightJustified(4, QLatin1Char('0'))
+            << ",\"" << Protocol::diagFaultNames(d.diag).join(QLatin1Char('|')) << '"';
         }
     }
 
