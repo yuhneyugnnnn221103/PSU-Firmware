@@ -142,64 +142,25 @@
 
 #define INA228_FAULT_MASK   (INA228_FLAG_TMPOL  | INA228_FLAG_SHNTOL | \
                              INA228_FLAG_SHNTUL | INA228_FLAG_BUSOL  | \
-                             INA228_FLAG_BUSUL  | INA228_FLAG_POL    | \
-                             INA228_FLAG_MATHOF)
+                             INA228_FLAG_BUSUL  | INA228_FLAG_POL)
 
-///* ==========================================================================
-// * 5. NGUONG CANH BAO
-// *
-// * LUU Y DATASHEET: cac thanh ghi nguong tro ve mac dinh sau MOI chu ky
-// * nguon VS -> phai nap lai moi lan cap nguon. ina228_verify_config() chay
-// * dinh ky chinh la co che phat hien va nap lai.
-// *
-// * LSB cua thanh ghi nguong lon gap 16 lan LSB do luong (thanh ghi nguong
-// * 16-bit vs du lieu 20-bit).
-// * ========================================================================== */
-//
-///* SOVL/SUVL: 1.25 uV/LSB khi ADCRANGE = 1  (= 78.125 nV x 16) */
-//#define INA228_SOVL_LSB_V         1.25e-6f
-///* BOVL/BUVL: 3.125 mV/LSB  (= 195.3125 uV x 16), khong dau, 15-bit */
-//#define INA228_BOVL_LSB_V         3.125e-3f
-///* TEMP_LIMIT: 7.8125 m degC/LSB, two's complement */
-//#define INA228_TLIM_LSB_C         7.8125e-3f
-///* PWR_LIMIT: 256 x POWER_LSB = 64 mW/LSB, khong dau */
-//#define INA228_PLIM_LSB_W         (256.0f * INA228_POWER_LSB)
-//
-///* Macro quy doi don vi vat ly -> gia tri thanh ghi */
-//#define INA228_AMP_TO_SOVL(a)     ((uint16_t)(int16_t)((a) * INA228_R_SHUNT_OHM / INA228_SOVL_LSB_V))
-//#define INA228_VOLT_TO_BOVL(v)    ((uint16_t)((v) / INA228_BOVL_LSB_V))
-//#define INA228_DEGC_TO_TLIM(t)    ((uint16_t)(int16_t)((t) / INA228_TLIM_LSB_C))
-//#define INA228_WATT_TO_PLIM(w)    ((uint16_t)((w) / INA228_PLIM_LSB_W))
-//
-///* --- Nguong thuc te. Sua o day, khong sua cho khac. --- */
-//#define INA228_OVERCURRENT_A       28.0f    /* 25 A dinh muc + 12% du         */
-//#define INA228_REVCURRENT_A       (-5.0f)   /* dong nguoc dang ke             */
-//#define INA228_OVERTEMP_C          100.0f   /* die temp, package gioi han 125 */
-//
-//#define INA228_SOVL_VALUE         INA228_AMP_TO_SOVL(INA228_OVERCURRENT_A)
-//#define INA228_SUVL_VALUE         INA228_AMP_TO_SOVL(INA228_REVCURRENT_A)
-//#define INA228_TEMP_LIMIT_VALUE   INA228_DEGC_TO_TLIM(INA228_OVERTEMP_C)
-//
-///* TODO: dien theo dai bus thuc te cua DCM4623TD2H26F0T00 truoc khi ra board.
-// * De o gia tri reset = tat canh bao (BOVL 7FFFh = 102 V, BUVL 0h = 0 V). */
-//#define INA228_BOVL_ENABLE        0
-//#define INA228_BUVL_ENABLE        0
-//#define INA228_BUS_OVERVOLT_V     30.0f
-//#define INA228_BUS_UNDERVOLT_V    18.0f
-//
-//#if INA228_BOVL_ENABLE
-//  #define INA228_BOVL_VALUE       INA228_VOLT_TO_BOVL(INA228_BUS_OVERVOLT_V)
-//#else
-//  #define INA228_BOVL_VALUE       0x7FFFu
-//#endif
-//#if INA228_BUVL_ENABLE
-//  #define INA228_BUVL_VALUE       INA228_VOLT_TO_BOVL(INA228_BUS_UNDERVOLT_V)
-//#else
-//  #define INA228_BUVL_VALUE       0x0000u
-//#endif
-//
-///* PWR_LIMIT phu thuoc dien ap bus -> de mac dinh (max) cho toi khi chot */
-//#define INA228_PWR_LIMIT_VALUE    0xFFFFu
+/* ==========================================================================
+ * 5. HE SO QUY DOI NGUONG CANH BAO
+ *   LSB cua thanh ghi ngUONG lon gap 16 lan LSB do luong 20-bit tuong ung
+ *   (thanh ghi nguong chi 16-bit).
+ * ========================================================================== */
+#define INA228_SOVL_LSB_V     1.25e-6f    /* V/LSB, ADCRANGE = 1 (16 x 78.125 nV) */
+#define INA228_BUSVL_LSB_V    3.125e-3f   /* V/LSB (16 x 195.3125 uV)             */
+
+/* Gia tri "khong bao gio trip" */
+#define INA228_SOVL_DISABLED  0x7FFFu
+#define INA228_SUVL_DISABLED  0x8000u
+#define INA228_BOVL_DISABLED  0x7FFFu
+#define INA228_BUVL_DISABLED  0x0000u
+
+/* Bien vat ly toi da bieu dien duoc */
+#define INA228_SOVL_MAX_A     (32767.0f * INA228_SOVL_LSB_V / INA228_R_SHUNT_OHM)  /* 40.95 A */
+#define INA228_BUSVL_MAX_V    (32767.0f * INA228_BUSVL_LSB_V)                      /* 102.4 V */
 
 /* ==========================================================================
  * 6. THAM SO BUS / THOI GIAN
@@ -210,5 +171,9 @@
 #define INA228_STALE_MS           500u   /* qua han nay coi nhu du lieu chet */
 
 #define INA228_SCAN_PERIOD_MS     60u    /* > 50.5 ms chu ky ADC             */
+
+#define INA228_ALERT_MIN_GAP_MS   20u
+
+#define INA228_DIAG_REFRESH_MS    250u
 
 #endif /* INA228_CFG_H_ */

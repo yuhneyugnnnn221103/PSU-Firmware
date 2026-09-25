@@ -5,11 +5,10 @@
  ******************************************************************************
  */
 
+#include <ina228_driver.h>
 #include <string.h>
-#include "ina228_driver.h"
-
-///* Ham do CubeMX sinh, dung lai khi reset cung ngoai vi */
-//extern void MX_I2C1_Init(void);
+#include "main.h"
+#include <math.h>
 
 /* ==========================================================================
  * TRANG THAI NOI BO
@@ -20,14 +19,11 @@ typedef struct {
     uint8_t len;
 } ina_read_item_t;
 
-/* Vong day du: them nhiet do va VSHUNT de kiem chung hieu chuan */
 static const ina_read_item_t s_seq_full[] = {
 		{ INA228_REG_ADC_CONFIG, 2},
 	    { INA228_REG_VBUS,    3 },
 	    { INA228_REG_CURRENT, 3 },
-//	    { INA228_REG_POWER,   3 },
 	    { INA228_REG_DIETEMP, 2 },
-//	    { INA228_REG_VSHUNT,  3 },
 };
 #define INA_READ_SEQ_LEN  (sizeof(s_seq_full) / sizeof(s_seq_full[0]))
 
@@ -121,20 +117,10 @@ static void ina_store(ina228_dev_t *dev, uint8_t reg, const uint8_t *b)
         dev->meas.current    = (float)dev->raw.current_raw * INA228_CURRENT_LSB;
         break;
 
-//    case INA228_REG_POWER:
-//        dev->raw.power_raw = ina_parse_24_unsigned(b);
-//        dev->meas.power    = (float)dev->raw.power_raw * INA228_POWER_LSB;
-//        break;
-
     case INA228_REG_DIETEMP:
         dev->raw.dietemp_raw = (int16_t)(((uint16_t)b[0] << 8) | b[1]);
         dev->meas.die_temp   = (float)dev->raw.dietemp_raw * INA228_DIETEMP_LSB;
         break;
-
-//    case INA228_REG_VSHUNT:
-//        dev->raw.vshunt_raw = ina_parse_20_signed(b);
-//        dev->meas.v_shunt   = (float)dev->raw.vshunt_raw * INA228_VSHUNT_LSB;
-//        break;
 
     default:
         break;
@@ -142,7 +128,7 @@ static void ina_store(ina228_dev_t *dev, uint8_t reg, const uint8_t *b)
 }
 
 /* ==========================================================================
- * BLOCKING	(hàm test bring up nhanh, khi implement sẽ dùng DMA)
+ * BLOCKING
  * ========================================================================== */
 
 static ina228_status_t ina_read_blocking(ina228_dev_t *dev, uint8_t reg,
@@ -228,15 +214,6 @@ ina228_status_t ina228_dev_init(ina228_dev_t *dev)
         { INA228_REG_SHUNT_TEMPCO, INA228_SHUNT_TEMPCO_VALUE },
         { INA228_REG_ADC_CONFIG,   INA228_ADC_CONFIG_VALUE   },
 
-        /* Nguong: datasheet noi ro cac thanh ghi nay ve mac dinh sau moi
-         * chu ky nguon VS -> phai nap lai moi lan khoi tao. */
-//        { INA228_REG_SOVL,         INA228_SOVL_VALUE         },
-//        { INA228_REG_SUVL,         INA228_SUVL_VALUE         },
-//        { INA228_REG_BOVL,         INA228_BOVL_VALUE         },
-//        { INA228_REG_BUVL,         INA228_BUVL_VALUE         },
-//        { INA228_REG_TEMP_LIMIT,   INA228_TEMP_LIMIT_VALUE   },
-//        { INA228_REG_PWR_LIMIT,    INA228_PWR_LIMIT_VALUE    },
-
         /* DIAG_ALRT sau cung: chi bat ALERT khi moi nguong da san sang */
         { INA228_REG_DIAG_ALRT,    INA228_DIAG_ALRT_VALUE    },
     };
@@ -252,6 +229,9 @@ ina228_status_t ina228_dev_init(ina228_dev_t *dev)
     if ((dev->diag_alrt & INA228_FLAG_MEMSTAT) == 0u) {
         dev->diag_sticky |= INA228_FLAG_MEMSTAT;   /* IC co the sai so nang */
     }
+
+    // re-init ghi lại ngưỡng nếu PC đã nạp cấu hình limit
+    (void)ina228_write_limits(dev);
 
     dev->alert_pending = false;
     dev->cfg_ok        = true;
@@ -406,30 +386,38 @@ void ina228_alert_isr(uint16_t gpio_pin)
 ina228_status_t ina228_alert_process(void)
 {
     ina228_status_t rc = INA228_OK;
+    uint32_t now = HAL_GetTick();
 
     if (s_bus.state == INA228_BUS_BUSY) return INA228_ERR_BUSY;
 
     for (uint8_t i = 0; i < INA228_CH_COUNT; i++) {
-        ina228_dev_t *dev = &s_bus.devs[i];
+		ina228_dev_t *dev = &s_bus.devs[i];
 
-        if (!dev->alert_pending) continue;
-        dev->alert_pending = false;
+		bool due_refresh = (uint32_t)(now - dev->alert_last_ms) >= INA228_DIAG_REFRESH_MS;
 
-        /* Voi ALATCH = 1, chinh lenh doc nay xoa co va nha chan ALERT.
-         * Do do KHONG duoc doc DIAG_ALRT o bat ky cho nao khac luc chay. */
-        if (ina228_read_reg16(dev, INA228_REG_DIAG_ALRT, &dev->diag_alrt)
-            != INA228_OK) {
-            dev->alert_pending = true;   /* giu lai, thu lai vong sau */
-            rc = INA228_ERR_I2C;
-            continue;
-        }
-        dev->diag_sticky |= (dev->diag_alrt & INA228_FAULT_MASK);
+		if (!dev->alert_pending && !due_refresh) continue;
 
-        /* Chan van thap sau khi doc -> nguyen nhan chua het */
-        if (HAL_GPIO_ReadPin(dev->alert_port, dev->alert_pin) == GPIO_PIN_RESET) {
-            dev->alert_pending = true;
-        }
-    }
+		if ((uint32_t)(now - dev->alert_last_ms) < INA228_ALERT_MIN_GAP_MS) continue;
+		dev->alert_last_ms = now;
+
+		dev->alert_pending = false;
+
+		if (ina228_read_reg16(dev, INA228_REG_DIAG_ALRT, &dev->diag_alrt) != INA228_OK) {
+			dev->alert_pending = true;
+			rc = INA228_ERR_I2C;
+			continue;
+		}
+
+		uint16_t fault = dev->diag_alrt & INA228_FAULT_MASK;
+		uint16_t fresh = (uint16_t)(fault & ~dev->diag_sticky);
+		dev->diag_sticky |= fault;
+		if (fresh != 0u) dev->alert_new = true;
+
+		if (HAL_GPIO_ReadPin(dev->alert_port, dev->alert_pin) == GPIO_PIN_RESET) {
+			dev->alert_pending = true;
+		}
+	}
+
     return rc;
 }
 
@@ -441,7 +429,7 @@ uint16_t ina228_get_sticky(ina228_dev_t *dev, bool clear)
 }
 
 /* ==========================================================================
- * TIEN ICH
+ * HELPER
  * ========================================================================== */
 
 ina228_dev_t *ina228_get_dev(uint8_t idx)
@@ -450,14 +438,71 @@ ina228_dev_t *ina228_get_dev(uint8_t idx)
     return &s_bus.devs[idx];
 }
 
-bool ina228_check_dma_buffer(void)
+/* ==========================================================================
+ * LIMIT
+ * ========================================================================== */
+ina228_status_t ina228_write_limits(ina228_dev_t *dev)
 {
-    uint32_t addr = (uint32_t)(uintptr_t)s_rxbuf;
-    return !(addr >= INA_DTCM_BASE && addr <= INA_DTCM_END);
+    if (!dev->limits.loaded) return INA228_OK;   /* PC chua cau hinh */
+
+    ina228_status_t st;
+    st = ina228_write_reg16(dev, INA228_REG_SOVL, dev->limits.sovl);
+    if (st != INA228_OK) return st;
+    st = ina228_write_reg16(dev, INA228_REG_BOVL, dev->limits.bovl);
+    if (st != INA228_OK) return st;
+    return ina228_write_reg16(dev, INA228_REG_BUVL, dev->limits.buvl);
 }
 
-// Callback
+/* Quy doi + clamp. Tra ve raw 16-bit da san sang ghi. */
+static uint16_t lim_sovl_raw(float a)
+{
+    if (!isfinite(a) || a <= 0.0f) return INA228_SOVL_DISABLED;
 
-void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c) { ina228_i2c_rx_complete(hi2c); }
-void HAL_I2C_ErrorCallback   (I2C_HandleTypeDef *hi2c) { ina228_i2c_error(hi2c); }
-void HAL_GPIO_EXTI_Callback  (uint16_t pin)            { ina228_alert_isr(pin); }
+    float counts = (a * INA228_R_SHUNT_OHM) / INA228_SOVL_LSB_V;
+    if (counts > 32767.0f) counts = 32767.0f;
+    return (uint16_t)(int16_t)(counts + 0.5f);
+}
+
+static uint16_t lim_busv_raw(float v, uint16_t disabled)
+{
+    if (!isfinite(v) || v <= 0.0f) return disabled;
+
+    float counts = v / INA228_BUSVL_LSB_V;
+    if (counts > 32767.0f) counts = 32767.0f;   /* bit15 Reserved, phai = 0 */
+    return (uint16_t)(counts + 0.5f) & 0x7FFFu;
+}
+
+ina228_status_t ina228_read_limits(ina228_dev_t *dev)
+{
+    ina228_status_t st;
+    if (dev == NULL) return INA228_ERR_PARAM;
+
+    st = ina228_read_reg16(dev, INA228_REG_SOVL, &dev->limits.sovl);
+    if (st != INA228_OK) return st;
+    st = ina228_read_reg16(dev, INA228_REG_BOVL, &dev->limits.bovl);
+    if (st != INA228_OK) return st;
+    return ina228_read_reg16(dev, INA228_REG_BUVL, &dev->limits.buvl);
+}
+
+ina228_status_t ina228_set_limits_f(ina228_dev_t *dev, float sovl_a, float bovl_v, float buvl_v)
+{
+    ina228_status_t st;
+
+    if (dev == NULL)                    return INA228_ERR_PARAM;
+    if (s_bus.state != INA228_BUS_IDLE) return INA228_ERR_BUSY;
+
+    dev->limits.sovl_a = sovl_a;
+    dev->limits.bovl_v = bovl_v;
+    dev->limits.buvl_v = buvl_v;
+
+    dev->limits.sovl = lim_sovl_raw(sovl_a);
+    dev->limits.suvl = INA228_SUVL_DISABLED;      /* bo qua theo yeu cau */
+    dev->limits.bovl = lim_busv_raw(bovl_v, INA228_BOVL_DISABLED);
+    dev->limits.buvl = lim_busv_raw(buvl_v, INA228_BUVL_DISABLED);
+    dev->limits.loaded = true;
+
+    st = ina228_write_limits(dev);
+    if (st != INA228_OK) return st;
+
+    return ina228_read_limits(dev);
+}

@@ -59,6 +59,9 @@ PSU_stm32h7.list \
 OBJCOPY_HEX += \
 PSU_stm32h7.hex \
 
+OBJCOPY_BIN += \
+PSU_stm32h7.bin \
+
 
 # All Target
 all: main-build
@@ -87,12 +90,17 @@ PSU_stm32h7.hex: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
 	@echo 'Finished building: $@'
 	@echo ' '
 
+PSU_stm32h7.bin: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-objcopy  -O binary $(EXECUTABLES) "PSU_stm32h7.bin"
+	@echo 'Finished building: $@'
+	@echo ' '
+
 # Other Targets
 clean:
-	-$(RM) PSU_stm32h7.elf PSU_stm32h7.hex PSU_stm32h7.list PSU_stm32h7.map default.size.stdout
+	-$(RM) PSU_stm32h7.bin PSU_stm32h7.elf PSU_stm32h7.hex PSU_stm32h7.list PSU_stm32h7.map default.size.stdout
 	-@echo ' '
 
-secondary-outputs: $(SIZE_OUTPUT) $(OBJDUMP_LIST) $(OBJCOPY_HEX)
+secondary-outputs: $(SIZE_OUTPUT) $(OBJDUMP_LIST) $(OBJCOPY_HEX) $(OBJCOPY_BIN)
 
 fail-specified-linker-script-missing:
 	@echo 'Error: Cannot find the specified linker script. Check the linker settings in the build configuration.'

@@ -22,10 +22,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "ina228_driver.h"
-#include "comm.h"
-
-#include "usbd_cdc_if.h"
+#include "app_main.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -78,12 +75,7 @@ static void MX_USART1_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-ina228_dev_t g_devs[4] = {
-		{.addr7 = INA228_ADDR_CH1, .alert_port = DCM_CUR_ALRT1_GPIO_Port, .alert_pin = DCM_CUR_ALRT1_Pin },
-		{.addr7 = INA228_ADDR_CH2, .alert_port = DCM_CUR_ALRT2_GPIO_Port, .alert_pin = DCM_CUR_ALRT2_Pin },
-		{.addr7 = INA228_ADDR_CH3, .alert_port = DCM_CUR_ALRT3_GPIO_Port, .alert_pin = DCM_CUR_ALRT3_Pin },
-		{.addr7 = INA228_ADDR_CH4, .alert_port = DCM_CUR_ALRT4_GPIO_Port, .alert_pin = DCM_CUR_ALRT4_Pin },
-};
+
 /* USER CODE END 0 */
 
 /**
@@ -94,7 +86,12 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+	__enable_irq();
 
+	  extern uint32_t g_pfnVectors;
+	  SCB->VTOR = (uint32_t)&g_pfnVectors;
+	  __DSB();
+	  __ISB();
   /* USER CODE END 1 */
 
   /* MPU Configuration--------------------------------------------------------*/
@@ -111,6 +108,7 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
+
   // Enable clock cho vung D2 SRAM
   __HAL_RCC_D2SRAM1_CLK_ENABLE();
   __HAL_RCC_D2SRAM2_CLK_ENABLE();
@@ -121,6 +119,8 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
+
+  App_EarlyInit();
 
   /* USER CODE END SysInit */
 
@@ -134,60 +134,16 @@ int main(void)
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
 
-  ina228_bus_init(&hi2c1, g_devs);
-  ina228_init_all();
-  Comm_Init();
+  App_Init();
 
-  uint32_t t_scan = 0;
-  uint32_t t_dcm = 0;
-  uint32_t t_cfg_verify = 0;
-
-  HAL_Delay(50);
-
-
-
-//////////////  uint8_t msg[] = "USB OTG CDC Working!\r\n";
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-////////////	  CDC_Transmit_HS(msg, sizeof(msg) - 1);
 
-	  uint32_t now = HAL_GetTick();
-
-	  ina228_bus_tick(now);
-
-	  if ((uint32_t)(now - t_dcm) >= 10u) {
-		  t_dcm = now;
-		  dcm_poll();
-		  Comm_TxWatchdog(now);
-	  }
-
-	  if((uint32_t)(now - t_scan) >= INA228_SCAN_PERIOD_MS) {
-		  t_scan = now;
-
-		  HAL_GPIO_TogglePin(RD_LED_GPIO_Port, RD_LED_Pin);
-		  Comm_OnTick();
-	  }
-
-	  Comm_RxPoll();
-	  Comm_Poll(now);
-
-	  if(ina228_bus_state() == INA228_BUS_IDLE) {
-		  ina228_alert_process();
-
-		  if((uint32_t)(now - t_cfg_verify) >= 250u) {
-			  t_cfg_verify = now;
-			  for (uint8_t i = 0; i < 4; i++) {
-				  if(g_devs[i].cfg_ok)		continue;
-				  if(!ina228_is_fresh(&g_devs[i], now))	continue;
-				  ina228_dev_init(&g_devs[i]);
-			  }
-		  }
-	  }
-
+	  App_Loop();
 
     /* USER CODE END WHILE */
 

@@ -34,7 +34,8 @@ Core/Src/comm.o: ../Core/Src/comm.c ../Core/Inc/comm.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_pcd.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_ll_usb.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_pcd_ex.h \
- ../Core/Inc/ina228_cfg.h ../Core/Inc/main.h
+ ../Core/Inc/ina228_cfg.h ../Core/Inc/main.h ../Core/Inc/safety.h \
+ ../Core/Inc/fw_update.h ../Core/Inc/cfg_store.h ../Core/Inc/ota_map.h
 ../Core/Inc/comm.h:
 ../Core/Inc/ina228_driver.h:
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal.h:
@@ -73,3 +74,7 @@ Core/Src/comm.o: ../Core/Src/comm.c ../Core/Inc/comm.h \
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_pcd_ex.h:
 ../Core/Inc/ina228_cfg.h:
 ../Core/Inc/main.h:
+../Core/Inc/safety.h:
+../Core/Inc/fw_update.h:
+../Core/Inc/cfg_store.h:
+../Core/Inc/ota_map.h:

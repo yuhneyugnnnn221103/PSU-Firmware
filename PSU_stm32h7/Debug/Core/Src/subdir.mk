@@ -5,9 +5,14 @@
 
 # Add inputs and outputs from these tool invocations to the build variables 
 C_SRCS += \
+../Core/Src/cfg_store.c \
 ../Core/Src/comm.c \
+../Core/Src/crc32_sw.c \
+../Core/Src/fw_update.c \
 ../Core/Src/ina228_driver.c \
+../Core/Src/led.c \
 ../Core/Src/main.c \
+../Core/Src/safety.c \
 ../Core/Src/stm32h7xx_hal_msp.c \
 ../Core/Src/stm32h7xx_it.c \
 ../Core/Src/syscalls.c \
@@ -15,9 +20,14 @@ C_SRCS += \
 ../Core/Src/system_stm32h7xx.c 
 
 OBJS += \
+./Core/Src/cfg_store.o \
 ./Core/Src/comm.o \
+./Core/Src/crc32_sw.o \
+./Core/Src/fw_update.o \
 ./Core/Src/ina228_driver.o \
+./Core/Src/led.o \
 ./Core/Src/main.o \
+./Core/Src/safety.o \
 ./Core/Src/stm32h7xx_hal_msp.o \
 ./Core/Src/stm32h7xx_it.o \
 ./Core/Src/syscalls.o \
@@ -25,9 +35,14 @@ OBJS += \
 ./Core/Src/system_stm32h7xx.o 
 
 C_DEPS += \
+./Core/Src/cfg_store.d \
 ./Core/Src/comm.d \
+./Core/Src/crc32_sw.d \
+./Core/Src/fw_update.d \
 ./Core/Src/ina228_driver.d \
+./Core/Src/led.d \
 ./Core/Src/main.d \
+./Core/Src/safety.d \
 ./Core/Src/stm32h7xx_hal_msp.d \
 ./Core/Src/stm32h7xx_it.d \
 ./Core/Src/syscalls.d \
@@ -42,7 +57,7 @@ Core/Src/%.o Core/Src/%.su Core/Src/%.cyclo: ../Core/Src/%.c Core/Src/subdir.mk
 clean: clean-Core-2f-Src
 
 clean-Core-2f-Src:
-	-$(RM) ./Core/Src/comm.cyclo ./Core/Src/comm.d ./Core/Src/comm.o ./Core/Src/comm.su ./Core/Src/ina228_driver.cyclo ./Core/Src/ina228_driver.d ./Core/Src/ina228_driver.o ./Core/Src/ina228_driver.su ./Core/Src/main.cyclo ./Core/Src/main.d ./Core/Src/main.o ./Core/Src/main.su ./Core/Src/stm32h7xx_hal_msp.cyclo ./Core/Src/stm32h7xx_hal_msp.d ./Core/Src/stm32h7xx_hal_msp.o ./Core/Src/stm32h7xx_hal_msp.su ./Core/Src/stm32h7xx_it.cyclo ./Core/Src/stm32h7xx_it.d ./Core/Src/stm32h7xx_it.o ./Core/Src/stm32h7xx_it.su ./Core/Src/syscalls.cyclo ./Core/Src/syscalls.d ./Core/Src/syscalls.o ./Core/Src/syscalls.su ./Core/Src/sysmem.cyclo ./Core/Src/sysmem.d ./Core/Src/sysmem.o ./Core/Src/sysmem.su ./Core/Src/system_stm32h7xx.cyclo ./Core/Src/system_stm32h7xx.d ./Core/Src/system_stm32h7xx.o ./Core/Src/system_stm32h7xx.su
+	-$(RM) ./Core/Src/cfg_store.cyclo ./Core/Src/cfg_store.d ./Core/Src/cfg_store.o ./Core/Src/cfg_store.su ./Core/Src/comm.cyclo ./Core/Src/comm.d ./Core/Src/comm.o ./Core/Src/comm.su ./Core/Src/crc32_sw.cyclo ./Core/Src/crc32_sw.d ./Core/Src/crc32_sw.o ./Core/Src/crc32_sw.su ./Core/Src/fw_update.cyclo ./Core/Src/fw_update.d ./Core/Src/fw_update.o ./Core/Src/fw_update.su ./Core/Src/ina228_driver.cyclo ./Core/Src/ina228_driver.d ./Core/Src/ina228_driver.o ./Core/Src/ina228_driver.su ./Core/Src/led.cyclo ./Core/Src/led.d ./Core/Src/led.o ./Core/Src/led.su ./Core/Src/main.cyclo ./Core/Src/main.d ./Core/Src/main.o ./Core/Src/main.su ./Core/Src/safety.cyclo ./Core/Src/safety.d ./Core/Src/safety.o ./Core/Src/safety.su ./Core/Src/stm32h7xx_hal_msp.cyclo ./Core/Src/stm32h7xx_hal_msp.d ./Core/Src/stm32h7xx_hal_msp.o ./Core/Src/stm32h7xx_hal_msp.su ./Core/Src/stm32h7xx_it.cyclo ./Core/Src/stm32h7xx_it.d ./Core/Src/stm32h7xx_it.o ./Core/Src/stm32h7xx_it.su ./Core/Src/syscalls.cyclo ./Core/Src/syscalls.d ./Core/Src/syscalls.o ./Core/Src/syscalls.su ./Core/Src/sysmem.cyclo ./Core/Src/sysmem.d ./Core/Src/sysmem.o ./Core/Src/sysmem.su ./Core/Src/system_stm32h7xx.cyclo ./Core/Src/system_stm32h7xx.d ./Core/Src/system_stm32h7xx.o ./Core/Src/system_stm32h7xx.su
 
 .PHONY: clean-Core-2f-Src
 

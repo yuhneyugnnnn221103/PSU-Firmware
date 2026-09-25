@@ -1,10 +1,10 @@
 #ifndef INA228_DRIVER_H_
 #define INA228_DRIVER_H_
 
+#include <ina228_cfg.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include "stm32h7xx_hal.h"
-#include "ina228_cfg.h"
 
 /* Section cho buffer DMA. Phai ton tai trong linker script va nam ngoai
  * DTCM (DMA1/DMA2 khong truy cap duoc DTCM tren STM32H7). Vd:
@@ -52,6 +52,12 @@ typedef struct {
 } ina228_raw_t;
 
 typedef struct {
+    uint16_t sovl, suvl, bovl, buvl;   /* raw da ghi / da doc lai */
+    float    sovl_a, bovl_v, buvl_v;   /* gia tri PC yeu cau      */
+    bool     loaded;
+} ina228_limits_t;
+
+typedef struct {
     /* --- cau hinh, dien truoc khi goi ina228_bus_init() --- */
     uint8_t        addr7;            /* 0x40 / 0x41 / 0x44 / 0x45 */
     GPIO_TypeDef  *alert_port;
@@ -68,6 +74,11 @@ typedef struct {
     /* --- ket qua --- */
     ina228_meas_t  meas;
     ina228_raw_t   raw;
+
+    ina228_limits_t limits;
+
+    uint32_t alert_last_ms;      /* rate limit doc DIAG_ALRT */
+    bool     alert_new;          /* co bit loi MOI ke tu lan bao gan nhat */
 } ina228_dev_t;
 
 /* ==========================================================================
@@ -82,6 +93,22 @@ ina228_status_t ina228_dev_init(ina228_dev_t *dev);
 
 /** @brief Init ca 4 kenh. Tra ve OK neu it nhat 1 kenh nap duoc. */
 ina228_status_t ina228_init_all(void);
+
+/**
+ * @brief Dat nguong tu don vi vat ly. Firmware quy doi sang raw, clamp,
+ *        ghi xuong IC roi DOC LAI de xac nhan.
+ * @param sovl_a  nguong qua dong, A.  <= 0 hoac NaN = tat canh bao
+ * @param bovl_v  nguong qua ap bus, V. <= 0 hoac NaN = tat
+ * @param buvl_v  nguong sut ap bus, V. <= 0 hoac NaN = tat
+ * @note  BLOCKING (~6 giao dich I2C). CHI goi khi ina228_bus_state()==IDLE.
+ */
+ina228_status_t ina228_set_limits_f(ina228_dev_t *dev,
+                                    float sovl_a, float bovl_v, float buvl_v);
+
+/** @brief Doc lai 3 thanh ghi nguong tu IC vao dev->limits. */
+ina228_status_t ina228_read_limits(ina228_dev_t *dev);
+
+ina228_status_t ina228_write_limits(ina228_dev_t *dev);
 
 /* ==========================================================================
  * TRUY CAP THANH GHI - BLOCKING (co retry)
@@ -152,7 +179,5 @@ static inline bool ina228_is_fresh(const ina228_dev_t *d, uint32_t now_ms)
 ///** @brief Thoi diem chu ky gan nhat hoan tat - dung de gate IWDG refresh. */
 //uint32_t ina228_last_cycle_ms(void);
 
-/** @brief Buffer DMA co nam ngoai DTCM khong. Goi mot lan luc bring-up. */
-bool ina228_check_dma_buffer(void);
 
 #endif /* INA228_DRIVER_H_ */

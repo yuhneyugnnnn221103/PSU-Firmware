@@ -29,4 +29,11 @@
 		<nature>org.eclipse.cdt.managedbuilder.core.managedBuildNature</nature>
 		<nature>org.eclipse.cdt.managedbuilder.core.ScannerConfigNature</nature>
 	</natures>
+	<linkedResources>
+		<link>
+			<name>shared_lib</name>
+			<type>2</type>
+			<location>D:/AESA/PSU/code/shared_lib</location>
+		</link>
+	</linkedResources>
 </projectDescription>

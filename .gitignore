@@ -1,0 +1,44 @@
+# ==========================================
+# STM32 / Embedded Build Artifacts
+# ==========================================
+
+# Build output directories
+Debug/
+Release/
+SlotA/
+SlotB/
+build/
+
+# Object files
+*.o
+*.obj
+*.elf
+*.bin
+*.hex
+*.map
+*.list
+*.su
+*.cyclo
+*.d
+
+# ==========================================
+# IDE Settings
+# ==========================================
+
+# STM32CubeIDE / Eclipse
+.settings/
+*.launch
+
+# ==========================================
+# OS & Misc
+# ==========================================
+Thumbs.db
+.DS_Store
+*.rar
+*.zip
+
+# ==========================================
+# Folders NOT to push
+# ==========================================
+INA228_UI_test/
+UI/
