@@ -1,5 +1,6 @@
 #include "ota_image.h"
 #include "crc32_sw.h"
+#include "flash_guard.h"
 
 const ota_slot_desc_t g_ota_slots[OTA_SLOT_COUNT] = {
 		[OTA_SLOT_A] = { OTA_SLOTA_BASE, OTA_SLOTA_SECTOR, 'A' },
@@ -33,8 +34,32 @@ ota_slot_t Ota_SlotFromTag(char tag)
 
 bool Ota_ImageValid(ota_slot_t s)
 {
-	if (!Ota_SlotValid(s))	return false;
-	const ota_image_header_t *h = Ota_Header(s);
-	if (h->magic != OTA_IMG_MAGIC || h->size == 0u || h->size > OTA_IMG_MAX_SIZE)	return false;
-	return Crc32_Compute((const uint8_t *)Ota_CodeBase(s), h->size) == h->crc32;
+    if (!Ota_SlotValid(s)) return false;
+
+    const uint32_t lo = g_ota_slots[s].base;
+    const uint32_t hi = lo + OTA_SLOT_SIZE;
+
+    /* 5 word dau header: magic, version, size, crc32, install_seq */
+    uint32_t hw[5];
+    FlashGuard_Begin(lo, hi);
+    FlashGuard_CopyWords(hw, lo, sizeof(hw));
+    if (!FlashGuard_End()) return false;
+
+    const uint32_t magic = hw[0], size = hw[2], crc_hdr = hw[3];
+    if (magic != OTA_IMG_MAGIC || size == 0u || size > OTA_IMG_MAX_SIZE) return false;
+
+    uint32_t       buf[64];                               /* 256 byte / khoi */
+    uint32_t       crc  = CRC32_INIT;
+    const uint32_t code = Ota_CodeBase(s);
+
+    for (uint32_t off = 0; off < size; off += sizeof(buf)) {
+        const uint32_t n = ((size - off) < sizeof(buf)) ? (size - off) : sizeof(buf);
+
+        FlashGuard_Begin(lo, hi);
+        FlashGuard_CopyWords(buf, code + off, (n + 3u) & ~3u);
+        if (!FlashGuard_End()) return false;              /* image hong ECC */
+
+        crc = Crc32_Update(crc, (const uint8_t *)buf, n);
+    }
+    return Crc32_Finalize(crc) == crc_hdr;
 }

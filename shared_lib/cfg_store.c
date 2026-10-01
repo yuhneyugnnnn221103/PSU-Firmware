@@ -4,10 +4,24 @@
 #include "flash.h"
 #include "cfg_store.h"
 #include "crc32_sw.h"
+#include "flash_guard.h"
 
-static inline const cfg_record_t *rec_at(uint32_t idx)
+static bool rec_read(uint32_t idx, cfg_record_t *out)
 {
-    return (const cfg_record_t *)(OTA_CFG_BASE + idx * CFG_REC_SIZE);
+    const uint32_t a = OTA_CFG_BASE + idx * CFG_REC_SIZE;
+    FlashGuard_Begin(a, a + CFG_REC_SIZE);
+    FlashGuard_CopyWords(out, a, CFG_REC_SIZE);
+    return FlashGuard_End();
+}
+
+/* O trong that su = TOAN BO 64 byte la 0xFF (khong chi magic) */
+static bool rec_is_erased(const cfg_record_t *r)
+{
+    const uint32_t *w = (const uint32_t *)r;
+    for (uint32_t i = 0; i < CFG_REC_SIZE / 4u; i++) {
+        if (w[i] != 0xFFFFFFFFu) return false;
+    }
+    return true;
 }
 
 static uint32_t rec_crc(const cfg_record_t *r)
@@ -89,16 +103,19 @@ void CfgStore_Init(void)
     s.next_free_idx = CFG_REC_COUNT;
 
     for (uint32_t i = 0; i < CFG_REC_COUNT; i++) {
-        const cfg_record_t *r = rec_at(i);
+        cfg_record_t r;
 
-        if (r->magic == 0xFFFFFFFFu) {
+        /* Hong ECC (mat dien GIUA luc ghi) -> bo qua, KHONG coi la o trong */
+        if (!rec_read(i, &r)) continue;
+
+        if (rec_is_erased(&r)) {
             s.next_free_idx = i;
             break;
         }
-        if (!rec_is_valid(r)) continue;
+        if (!rec_is_valid(&r)) continue;
 
-        if (r->seq > s.max_seq) s.max_seq = r->seq;
-        cache_apply(r->type, r->payload, r->len);
+        if (r.seq > s.max_seq) s.max_seq = r.seq;
+        cache_apply(r.type, r.payload, r.len);
     }
 }
 
@@ -129,8 +146,9 @@ static bool write_record(uint8_t type, const void *payload, uint8_t len)
             Flash_ProgramWords(OTA_CFG_BASE + idx * CFG_REC_SIZE,
                                (const uint8_t *)&rec, CFG_REC_SIZE);
 
-        /* Doc lai tu flash de xac nhan, khong tin moi ket qua HAL */
-        if (r.ok && rec_is_valid(rec_at(idx))) {
+        /* Doc lai qua guard, so sanh tung byte voi ban vua ghi */
+        cfg_record_t chk;
+        if (r.ok && rec_read(idx, &chk) && (memcmp(&chk, &rec, sizeof(rec)) == 0)) {
             cache_apply(type, payload, len);
             return true;
         }

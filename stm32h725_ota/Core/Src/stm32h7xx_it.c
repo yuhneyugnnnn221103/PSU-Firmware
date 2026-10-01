@@ -109,21 +109,6 @@ void MemManage_Handler(void)
 }
 
 /**
-  * @brief This function handles Pre-fetch fault, memory access fault.
-  */
-void BusFault_Handler(void)
-{
-  /* USER CODE BEGIN BusFault_IRQn 0 */
-
-  /* USER CODE END BusFault_IRQn 0 */
-  while (1)
-  {
-    /* USER CODE BEGIN W1_BusFault_IRQn 0 */
-    /* USER CODE END W1_BusFault_IRQn 0 */
-  }
-}
-
-/**
   * @brief This function handles Undefined instruction or illegal state.
   */
 void UsageFault_Handler(void)

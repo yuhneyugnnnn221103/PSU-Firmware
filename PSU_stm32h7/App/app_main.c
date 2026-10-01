@@ -7,6 +7,7 @@
 #include "main.h"
 #include "app_main.h"
 #include "cfg_store.h"
+#include "flash_guard.h"
 
 extern I2C_HandleTypeDef hi2c1;
 
@@ -73,6 +74,7 @@ static void self_confirmed_task(uint32_t now)
 
 void App_EarlyInit (void)
 {
+	FlashGuard_Init();
 	Wdg_Init();
 }
 

@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "boot_main.h"
 #include "iwdg_hw.h"
+#include "flash_guard.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -80,6 +81,7 @@ int main(void)
 
   /* USER CODE BEGIN Init */
 
+  FlashGuard_Init();
   IWDG_Start(WDG_TIMEOUT_MS);
 
   /* USER CODE END Init */
