@@ -8,7 +8,7 @@
 
 /* Section cho buffer DMA. Phai ton tai trong linker script va nam ngoai
  * DTCM (DMA1/DMA2 khong truy cap duoc DTCM tren STM32H7). Vd:
- *   .dma_buffer (NOLOAD) : { . = ALIGN(32); *(.dma_buffer) . = ALIGN(32); } >RAM_D1
+ *   .dma_buffer (NOLOAD) : { . = ALIGN(32); *(.dma_buffer) . = ALIGN(32); } >RAM_D2
  */
 #ifndef INA228_DMA_SECTION
 #define INA228_DMA_SECTION      ".dma_buffer"

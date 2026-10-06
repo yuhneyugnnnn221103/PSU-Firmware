@@ -221,13 +221,4 @@ void Comm_StatusTask(uint32_t now_ms);
  *         xong chua truoc khi bat dau gui FW_DATA. Goi moi vong main loop. */
 void Comm_FwPoll(void);
 
-/* ==========================================================================
- * KHOA KICH THUOC KHUNG - phat hien drift luc bien dich thay vi luc chay
- * ========================================================================== */
-//_Static_assert(TLM_FRAME_SZ     == 56u, "TLM frame size drift");
-//_Static_assert(TLM_CFG_FRAME_SZ == 20u, "SET_LIMIT frame size drift");
-//_Static_assert(TLM_AUX_FRAME_SZ == 16u, "AUX frame size drift");
-//_Static_assert(TLM_RX_MAX_SZ >= TLM_CFG_FRAME_SZ, "rx buffer too small");
-//_Static_assert(TLM_STS_OFF_TRIPCNT < (TLM_AUX_FRAME_SZ - 4u), "STATUS overflow");
-
 #endif /* COMM_H_ */
