@@ -3,14 +3,9 @@
 #include "ota_image.h"
 #include "cfg_store.h"
 #include "iwdg_hw.h"
+#include "boot_recovery.h"
 
 #define BOOT_MAX_ATTEMPTS   3u
-
-/* Vung RAM hop le cho MSP ban dau cua app (_estack) */
-#define RAM_DTCM_START      0x20000000u
-#define RAM_DTCM_END        0x20020000u     /* 128 KB */
-#define RAM_AXI_START       0x24000000u
-#define RAM_AXI_END         0x24050000u     /* 320 KB */
 
 typedef struct {
     bool     has_rec;
@@ -43,27 +38,6 @@ static bool is_exhausted(const slot_state_t *st)
     return st->has_rec && !st->confirmed && (st->boot_count >= BOOT_MAX_ATTEMPTS);
 }
 
-/* Kiem 2 word dau cua vector table truoc khi tin tuong nhay vao */
-static bool vector_ok(ota_slot_t sl)
-{
-    const uint32_t base  = Ota_CodeBase(sl);
-    const uint32_t msp   = *(const volatile uint32_t *)(base + 0u);
-    const uint32_t entry = *(const volatile uint32_t *)(base + 4u);
-    const uint32_t lo    = base;
-    const uint32_t hi    = g_ota_slots[sl].base + OTA_SLOT_SIZE;
-
-    const bool msp_ok =
-        ((msp & 3u) == 0u) &&
-        (((msp > RAM_DTCM_START) && (msp <= RAM_DTCM_END)) ||
-         ((msp > RAM_AXI_START)  && (msp <= RAM_AXI_END)));
-
-    const bool entry_ok =
-        ((entry & 1u) != 0u) &&                     /* bit Thumb */
-        ((entry & ~1u) >= lo) && ((entry & ~1u) < hi);
-
-    return msp_ok && entry_ok;
-}
-
 /* Anh moi cai hon (install_seq) thang; bang nhau thi so version */
 static bool newer(ota_slot_t b, ota_slot_t a)
 {
@@ -94,7 +68,7 @@ static ota_slot_t choose_slot(void)
     slot_state_t st[OTA_SLOT_COUNT];
 
     for (ota_slot_t sl = OTA_SLOT_A; sl < OTA_SLOT_COUNT; sl++) {
-        valid[sl] = Ota_ImageValid(sl) && vector_ok(sl);   /* CRC32 toan anh */
+        valid[sl] = Ota_ImageValid(sl) && Ota_VectorOk(sl);   /* CRC32 toan anh */
         IWDG_Refresh();
         st[sl]   = read_state(sl);
         cand[sl] = valid[sl] && !is_rejected(&st[sl]) && !is_exhausted(&st[sl]);
@@ -155,23 +129,12 @@ static void jump_to_slot(ota_slot_t sl)
     while (1) {}
 }
 
-static void fatal_no_valid_slot(void)
-{
-    /* Khong reset lien tuc: reset cung khong tao ra anh hop le.
-     * Nhay LED nhanh de bao loi, van giu SWD truy cap duoc. */
-    while (1) {
-        HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-        HAL_Delay(50);
-        IWDG_Refresh();
-    }
-}
-
 void Boot_Run(void)
 {
     CfgStore_Init();
 
     const ota_slot_t sl = choose_slot();
-    if (sl == OTA_SLOT_NONE) fatal_no_valid_slot();
+    if (sl == OTA_SLOT_NONE) Boot_RecoveryRun();   /* khong tro ve */
 
     /* CHI dem luot thu cho anh chua confirm. Anh da confirm khong bao
      * gio bi ha cap vi reset (watchdog, mat dien, tat/bat nhanh). */

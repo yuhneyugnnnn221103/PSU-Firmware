@@ -90,6 +90,7 @@
 #define TLM_FW_ACK_NO_COMMIT_PENDING 6u  /* FW_COMMIT nhung chua FW_END thanh cong */
 #define TLM_FW_ACK_ERASE_FAIL       7u   /* xoa sector that bai, info = HAL_FLASH_GetError() */
 #define TLM_FW_ACK_WRONG_SLOT       8u   /* anh link cho slot KIA, info = Reset_Handler doc duoc */
+#define TLM_FW_ACK_PROG_FAIL        9u   /* ghi flash that bai, info = HAL_FLASH_GetError() / dia chi */
 
 /* Buffer RX phai chua duoc khung lon nhat trong TOAN BO protocol - hien tai
  * la FW_DATA (268 byte), lon hon nhieu TLM_CFG_FRAME_SZ (20 byte) truoc day.

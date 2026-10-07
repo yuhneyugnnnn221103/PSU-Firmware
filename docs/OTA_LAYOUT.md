@@ -29,9 +29,31 @@ ghi `COMMIT` cuối cùng. Bank cũ chỉ bị xoá ở lần compaction kế ti
 
 Kiểm thử: `make -C tests/host test` (flash giả, cắt điện tại từng thao tác).
 
-## Khi không còn slot hợp lệ (recovery)
-`fatal_no_valid_slot()` nhấp LED nhanh và giữ SWD truy cập được; phục hồi bằng
-cách nạp lại qua SWD. Chưa có nhận ảnh qua cáp trong bootloader.
+## Recovery: nạp firmware trong bootloader khi cả hai slot hỏng
+Vào khi `choose_slot()` không tìm được slot nào có CRC32 + vector table hợp lệ.
+Bootloader nhận ảnh qua UART bằng **cùng giao thức FW_*** với app (`shared_lib/ota_proto.h`),
+trên cả 3 cổng (115200 8N1): RS422 #1 = UART5, RS422 #2 = USART1, FT232 = UART4.
+LED nhấp nhanh (50 ms). Code: `stm32h725_ota/Boot/boot_recovery.c` (giao thức) và
+`boot_recovery_hw.c` (UART mức thanh ghi, vòng chính).
+
+| Lệnh | Hành vi trong recovery |
+|---|---|
+| `FW_INFO` | trả ACK với byte slot = `'R'` (app trả `'A'`/`'B'`) → host biết đang ở recovery |
+| `FW_BEGIN` | kiểm size, **xoá cả 2 slot** (ACK sau khi xoá xong, ~vài giây) |
+| `FW_DATA` | chunk 0: lấy Reset_Handler để chọn slot đích (ảnh phải link đúng slot), ghi + đọc lại so sánh |
+| `FW_END` | kiểm CRC32 tổng → cấp `install_seq` → ghi header (1 flash-word, **ghi cuối**) → kiểm lại CRC từ flash + vector → ghi boot record |
+| `FW_COMMIT` | ACK rồi reset; bootloader khởi động slot mới |
+
+Mất điện ở bất kỳ bước nào: header chưa hợp lệ → vẫn không có ảnh hợp lệ → lại vào recovery.
+Khung `FW_DATA` dài cố định 268 byte (chunk cuối phải được host đệm), như app.
+
+Test host: `make -C tests/host test` (`recovery_test`: giao thức + cắt điện tại từng thao tác flash).
+
+### Khi sản phẩm đóng kín (không còn SWD/JTAG)
+- Bảo vệ ghi sector 0 (bootloader) bằng option byte **WRP** để OTA/recovery không thể làm hỏng bootloader.
+- RDP level 1 vẫn cho phép bootloader tự ghi flash; RDP level 2 là **không đảo ngược** – chỉ bật
+  sau khi đã kiểm thử recovery trên nhiều board.
+- Thiết bị phải có đường ra cổng UART nói trên (đã đủ cho recovery).
 
 ## Ghi flash khi đầu ra đang bật
 Xoá sector chặn CPU (kể cả ISR trip). App chỉ ghi cfg khi đầu ra bật nếu việc

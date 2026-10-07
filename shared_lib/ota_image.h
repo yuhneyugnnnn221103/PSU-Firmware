@@ -28,4 +28,7 @@ static inline uint32_t Ota_CodeBase(ota_slot_t s)
 
 bool Ota_ImageValid(ota_slot_t s);
 
+/* Kiem 2 word dau vector table (MSP trong RAM, entry Thumb nam trong slot) - doc qua FlashGuard */
+bool Ota_VectorOk(ota_slot_t s);
+
 #endif /* OTA_IMAGE_H_ */

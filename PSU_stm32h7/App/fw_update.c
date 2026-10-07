@@ -7,6 +7,28 @@
 #include "cfg_store.h"
 #include "flash.h"
 #include "cfg_record.h"
+#include "ota_proto.h"
+
+/* Khung FW_* phai khop voi bootloader recovery (shared_lib/ota_proto.h) */
+_Static_assert(TLM_HDR1 == OTAP_HDR1 && TLM_HDR2 == OTAP_HDR2 &&
+               TLM_TAIL1 == OTAP_TAIL1 && TLM_TAIL2 == OTAP_TAIL2 &&
+               TLM_BOARD_ADDR == OTAP_BOARD_ADDR, "khung FW_*: header/tail/addr lech");
+_Static_assert(TLM_CMD_FW_BEGIN == OTAP_CMD_FW_BEGIN && TLM_CMD_FW_DATA == OTAP_CMD_FW_DATA &&
+               TLM_CMD_FW_END == OTAP_CMD_FW_END && TLM_CMD_FW_COMMIT == OTAP_CMD_FW_COMMIT &&
+               TLM_CMD_FW_ACK == OTAP_CMD_FW_ACK && TLM_CMD_FW_INFO == OTAP_CMD_FW_INFO, "khung FW_*: cmd lech");
+_Static_assert(TLM_FW_CHUNK_MAX == OTAP_CHUNK_MAX && TLM_FW_BEGIN_SZ == OTAP_BEGIN_SZ &&
+               TLM_FW_DATA_FRAME_MAX == OTAP_DATA_FRAME_SZ && TLM_FW_CTRL_SZ == OTAP_CTRL_SZ &&
+               TLM_FW_ACK_SZ == OTAP_ACK_SZ, "khung FW_*: kich thuoc lech");
+_Static_assert(TLM_FW_BEGIN_OFF_SIZE == OTAP_BEGIN_OFF_SIZE && TLM_FW_BEGIN_OFF_CRC32 == OTAP_BEGIN_OFF_CRC32 &&
+               TLM_FW_BEGIN_OFF_VERSION == OTAP_BEGIN_OFF_VERSION && TLM_FW_DATA_OFF_SEQ == OTAP_DATA_OFF_SEQ &&
+               TLM_FW_DATA_OFF_LEN == OTAP_DATA_OFF_LEN && TLM_FW_DATA_OFF_PAYLOAD == OTAP_DATA_OFF_PAYLOAD &&
+               TLM_FW_ACK_OFF_CMD == OTAP_ACK_OFF_CMD && TLM_FW_ACK_OFF_STATUS == OTAP_ACK_OFF_STATUS &&
+               TLM_FW_ACK_OFF_INFO == OTAP_ACK_OFF_INFO && TLM_FW_ACK_OFF_SLOT == OTAP_ACK_OFF_SLOT, "khung FW_*: offset lech");
+_Static_assert(TLM_FW_ACK_OK == OTAP_ST_OK && TLM_FW_ACK_REFUSED == OTAP_ST_REFUSED &&
+               TLM_FW_ACK_BAD_SIZE == OTAP_ST_BAD_SIZE && TLM_FW_ACK_BAD_SEQ == OTAP_ST_BAD_SEQ &&
+               TLM_FW_ACK_CRC_FAIL == OTAP_ST_CRC_FAIL && TLM_FW_ACK_BUSY == OTAP_ST_BUSY &&
+               TLM_FW_ACK_NO_COMMIT_PENDING == OTAP_ST_NO_COMMIT && TLM_FW_ACK_ERASE_FAIL == OTAP_ST_ERASE_FAIL &&
+               TLM_FW_ACK_WRONG_SLOT == OTAP_ST_WRONG_SLOT && TLM_FW_ACK_PROG_FAIL == OTAP_ST_PROG_FAIL, "khung FW_*: ma trang thai lech");
 
 extern uint32_t g_pfnVectors;
 

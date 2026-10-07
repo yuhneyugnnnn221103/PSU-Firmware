@@ -1,13 +1,19 @@
-# Test host cho cfg_store (flash gia + mat dien tai tung thao tac). Chay: make -C tests/host
+# Test host (flash gia + mat dien tai tung thao tac). Chay: make -C tests/host test
 CC ?= gcc
-SRC = cfg_store_test.c ../../shared_lib/cfg_store.c ../../shared_lib/crc32_sw.c ../../shared_lib/ota_slot.c
+CFLAGS = -std=gnu11 -O1 -w -Iinc -I../../shared_lib -I../../stm32h725_ota/Boot
+SH = ../../shared_lib
+COMMON = flash_sim.c $(SH)/crc32_sw.c $(SH)/crc16_ccitt.c $(SH)/ota_slot.c
 
-cfg_store_test: $(SRC)
-	$(CC) -std=gnu11 -O1 -Iinc -I../../shared_lib $(SRC) -o $@
+cfg_store_test: cfg_store_test.c $(COMMON) $(SH)/cfg_store.c
+	$(CC) $(CFLAGS) $^ -o $@
 
-test: cfg_store_test
+recovery_test: recovery_test.c ../../stm32h725_ota/Boot/boot_recovery.c $(COMMON) $(SH)/cfg_store.c
+	$(CC) $(CFLAGS) $^ -o $@
+
+test: cfg_store_test recovery_test
 	./cfg_store_test
+	./recovery_test
 
 clean:
-	rm -f cfg_store_test
+	rm -f cfg_store_test recovery_test
 .PHONY: test clean
