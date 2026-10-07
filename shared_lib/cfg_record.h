@@ -5,12 +5,13 @@
 
 #define CFG_REC_MAGIC       0x43464732u
 #define CFG_REC_SIZE        64u
-#define CFG_REC_COUNT       (OTA_CFG_SIZE / CFG_REC_SIZE)   /* 2048 ban ghi */
+#define CFG_REC_COUNT       (OTA_CFG_SIZE / CFG_REC_SIZE)   /* 2048 ban ghi / bank */
 #define CFG_PAYLOAD_MAX     48u
 
 #define CFG_REC_TYPE_LIMITS     1u
 #define CFG_REC_TYPE_BOOT       2u
 #define CFG_REC_TYPE_INSTALL    3u
+#define CFG_REC_TYPE_COMMIT     4u   /* danh dau bank hop le, ghi CUOI snapshot */
 
 #define CFG_BOOT_COUNT_FORCE_FAIL   0xFFFFFFFFu
 

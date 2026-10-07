@@ -48,6 +48,22 @@ static inline void pwr_write(bool on)
     s.pwr_on = on;
 }
 
+/* Ghi thang BSRR: an toan khi goi tu HardFault/BusFault/Error_Handler. */
+void Safety_ForceOff(void)
+{
+#if SAFE_PWR_ACTIVE_HIGH
+    PWR_EN_CTRL_GPIO_Port->BSRR = (uint32_t)PWR_EN_CTRL_Pin << 16;
+#else
+    PWR_EN_CTRL_GPIO_Port->BSRR = (uint32_t)PWR_EN_CTRL_Pin;
+#endif
+}
+
+/* Ghi de ham weak trong shared_lib/flash_guard.c */
+void Fault_Hook(void)
+{
+    Safety_ForceOff();
+}
+
 static void goto_state(safe_state_t st, uint32_t now)
 {
     if (s.state == st) return;

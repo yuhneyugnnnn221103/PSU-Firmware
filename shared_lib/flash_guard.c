@@ -51,6 +51,9 @@ void FlashGuard_CopyWords(void *dst, uint32_t src, uint32_t len)
     }
 }
 
+/* Hook cho fault khong phuc hoi duoc; app ghi de de dua phan cung ve trang thai an toan. */
+__attribute__((weak)) void Fault_Hook(void) {}
+
 /* frame[] = stack frame do phan cung day vao: r0 r1 r2 r3 r12 lr pc xpsr */
 void flash_guard_busfault_c(uint32_t *frame)
 {
@@ -76,6 +79,7 @@ void flash_guard_busfault_c(uint32_t *frame)
 
     /* BusFault that (khong phai doc flash co bao ve) -> de IWDG reset */
     __disable_irq();
+    Fault_Hook();
     while (1) {}
 }
 

@@ -117,6 +117,9 @@ bool Safety_RequestPower(bool on);
  *         KHONG tu dong bat lai nguon: PC phai gui them PWR_CTRL(on). */
 void Safety_ClearFault(void);
 
+/** @brief Cat PWR_EN ngay, KHONG phu thuoc state/HAL. Dung trong fault handler. */
+void Safety_ForceOff(void);
+
 /* --- Truy van trang thai (dung cho khung STATUS 0x03 va LED) --- */
 safe_state_t Safety_State(void);
 fault_code_t Safety_Code(void);

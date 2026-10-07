@@ -261,11 +261,15 @@ uint8_t FwUpdate_End(uint32_t *out_info)
 		return TLM_FW_ACK_CRC_FAIL;
 	}
 
-    s.state = FWU_VERIFIED;
-
-    {
-        (void)CfgStore_WriteBoot(target_slot(), 0u, 0u);
+    /* Reset trang thai trial cua slot dich. Neu khong ghi duoc, ban ghi cu
+     * (vd FORCE_FAIL / het luot) co the khien bootloader bo anh moi -> khong
+     * duoc bao OK. */
+    if (!CfgStore_WriteBoot(target_slot(), 0u, 0u)) {
+        s.state = FWU_IDLE;
+        return TLM_FW_ACK_REFUSED;
     }
+
+    s.state = FWU_VERIFIED;
 
     if (out_info) *out_info = 1u;
 

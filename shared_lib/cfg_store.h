@@ -15,4 +15,8 @@ bool CfgStore_WriteLimits(const cfg_limits_payload_t *in);
 
 uint32_t CfgStore_AllocInstallSeq(void);
 
+/** @brief true neu lan ghi ke tiep co the PHAI XOA sector (khoi tao bank hoac compaction).
+ *         Xoa sector chan CPU ~vai tram ms -> khong nen lam khi dau ra dang bat. */
+bool CfgStore_NeedsErase(void);
+
 #endif /* CFG_STORE_H_ */

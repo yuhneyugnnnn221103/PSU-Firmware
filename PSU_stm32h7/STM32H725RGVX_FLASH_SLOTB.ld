@@ -6,12 +6,12 @@
 **  Abstract    : Linker script ung dung chinh, BUILD VARIANT SLOT B.
 **
 **                KHAC DUY NHAT SO VOI ban goc STM32H725RGVX_FLASH.ld:
-**                  FLASH ORIGIN = 0x08080400 (= OTA_SLOTB_BASE + 1024,
+**                  FLASH ORIGIN = 0x08060400 (= OTA_SLOTB_BASE + 1024,
 **                                 chua header ota_image_header_t 1024 byte
 **                                 - xem ota_map.h. Header do FW_END trong
 **                                 fw_update.c ghi rieng, KHONG nam trong
 **                                 .bin build ra tu day)
-**                  FLASH LENGTH = 0x5FC00 (= 384K - 1024, ~383KB)
+**                  FLASH LENGTH = 0x3FC00 (= 256K - 1024, ~255KB)
 **
 **  QUAN TRONG VE KICH THUOC HEADER: 1024 byte (KHONG PHAI 64) - day la
 **  YEU CAU BAT BUOC cua kien truc ARM (can le SCB->VTOR), khong phai lua
@@ -50,7 +50,7 @@ MEMORY
 {
   ITCMRAM (xrw)    : ORIGIN = 0x00000000,   LENGTH = 64K
   DTCMRAM (xrw)    : ORIGIN = 0x20000000,   LENGTH = 128K
-  FLASH    (rx)    : ORIGIN = 0x08080400,   LENGTH = 0x5FC00   /* Slot B + header */
+  FLASH    (rx)    : ORIGIN = 0x08060400,   LENGTH = 0x3FC00   /* Slot B + header */
   RAM_D1  (xrw)    : ORIGIN = 0x24000000,   LENGTH = 320K
   RAM_D2  (xrw)    : ORIGIN = 0x30000000,   LENGTH = 32K
   RAM_D3  (xrw)    : ORIGIN = 0x38000000,   LENGTH = 16K

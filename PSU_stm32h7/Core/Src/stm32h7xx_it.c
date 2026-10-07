@@ -22,6 +22,7 @@
 #include "stm32h7xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "safety.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -96,6 +97,7 @@ void NMI_Handler(void)
 void HardFault_Handler(void)
 {
   /* USER CODE BEGIN HardFault_IRQn 0 */
+  Safety_ForceOff();
 
   /* USER CODE END HardFault_IRQn 0 */
   while (1)
@@ -111,6 +113,7 @@ void HardFault_Handler(void)
 void MemManage_Handler(void)
 {
   /* USER CODE BEGIN MemoryManagement_IRQn 0 */
+  Safety_ForceOff();
 
   /* USER CODE END MemoryManagement_IRQn 0 */
   while (1)
@@ -126,6 +129,7 @@ void MemManage_Handler(void)
 void UsageFault_Handler(void)
 {
   /* USER CODE BEGIN UsageFault_IRQn 0 */
+  Safety_ForceOff();
 
   /* USER CODE END UsageFault_IRQn 0 */
   while (1)

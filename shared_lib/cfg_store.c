@@ -6,9 +6,23 @@
 #include "crc32_sw.h"
 #include "flash_guard.h"
 
-static bool rec_read(uint32_t idx, cfg_record_t *out)
+/* ==========================================================================
+ * 2 BANK LUAN PHIEN (sector 6 / 7).
+ * Bank "hop le" = co ban ghi COMMIT hop le. Compaction:
+ *   1. xoa bank KIA  2. ghi snapshot  3. ghi COMMIT (cuoi cung).
+ * Mat dien truoc buoc 3 -> bank moi khong co COMMIT -> bi bo qua, bank cu
+ * van day du. Sau buoc 3 -> bank moi thang (COMMIT.seq cao hon).
+ * Bank cu khong bi xoa ngay; no se bi xoa o lan compaction ke tiep.
+ * ========================================================================== */
+
+static uint32_t rec_addr(uint8_t bank, uint32_t idx)
 {
-    const uint32_t a = OTA_CFG_BASE + idx * CFG_REC_SIZE;
+    return OTA_CFG_BANK_BASE(bank) + idx * CFG_REC_SIZE;
+}
+
+static bool rec_read(uint8_t bank, uint32_t idx, cfg_record_t *out)
+{
+    const uint32_t a = rec_addr(bank, idx);
     FlashGuard_Begin(a, a + CFG_REC_SIZE);
     FlashGuard_CopyWords(out, a, CFG_REC_SIZE);
     return FlashGuard_End();
@@ -38,131 +52,219 @@ static bool rec_is_valid(const cfg_record_t *r)
 
 /* ==========================================================================
  * CACHE TRONG RAM - dien 1 lan luc CfgStore_Init(), cap nhat song song
- * moi lan ghi thanh cong de khong phai quet lai sector.
+ * moi lan ghi thanh cong de khong phai quet lai flash.
  * ========================================================================== */
-static struct {
-    uint32_t next_free_idx;    // = CFG_REC_COUNT neu sector day
-    uint32_t max_seq;
-
-    bool has_limits;
+typedef struct {
+    bool     has_limits;
     cfg_limits_payload_t limits;
 
     bool has_boot[OTA_SLOT_COUNT];
     cfg_boot_payload_t boot[OTA_SLOT_COUNT];
+} cfg_cache_t;
+
+static struct {
+    uint8_t  bank;             /* bank dang ghi */
+    bool     committed;        /* bank dang ghi da co COMMIT? */
+    uint32_t next_free_idx;    /* = CFG_REC_COUNT neu bank day */
+    uint32_t max_seq;
+    cfg_cache_t c;
 } s;
 
-static bool write_record(uint8_t type, const void *payload, uint8_t payload_len);
-static bool compact(void);
-
-static void cache_apply(uint8_t type, const void *payload, uint8_t len)
+static void cache_apply(cfg_cache_t *c, uint8_t type, const void *payload, uint8_t len)
 {
     if (type == CFG_REC_TYPE_LIMITS) {
         if (len != sizeof(cfg_limits_payload_t)) return;
-        memcpy(&s.limits, payload, sizeof(s.limits));
-        s.has_limits = true;
+        memcpy(&c->limits, payload, sizeof(c->limits));
+        c->has_limits = true;
     } else if (type == CFG_REC_TYPE_BOOT) {
         if (len != sizeof(cfg_boot_payload_t)) return;
         cfg_boot_payload_t bp;
         memcpy(&bp, payload, sizeof(bp));
         const ota_slot_t sl = Ota_SlotFromTag((char)bp.slot);
         if (Ota_SlotValid(sl)) {
-            s.boot[sl]     = bp;
-            s.has_boot[sl] = true;
+            c->boot[sl]     = bp;
+            c->has_boot[sl] = true;
         }
     }
 }
 
-static bool compact(void)
+typedef struct {
+    bool        has_commit;
+    uint32_t    commit_seq;
+    uint32_t    max_seq;
+    uint32_t    next_free;
+    cfg_cache_t c;
+} bank_scan_t;
+
+static void scan_bank(uint8_t bank, bank_scan_t *o)
 {
-	/* chup cache truoc khi xoa */
-	const bool had_limits = s.has_limits;
-	const cfg_limits_payload_t limits = s.limits;
-	bool had_boot[OTA_SLOT_COUNT];
-	cfg_boot_payload_t boot[OTA_SLOT_COUNT];
-	memcpy(had_boot, s.has_boot, sizeof(had_boot));
-	memcpy(boot, s.boot, sizeof(boot));
-
-	if (!Flash_EraseSector(OTA_CFG_SECTOR).ok) return false;
-
-	s.next_free_idx = 0u;                 /* max_seq GIU NGUYEN: seq tang lien tuc */
-	s.has_limits = false;
-	memset(s.has_boot, 0, sizeof(s.has_boot));
-
-    for (ota_slot_t sl = OTA_SLOT_A; sl < OTA_SLOT_COUNT; sl++) {
-        if (had_boot[sl] && !write_record(CFG_REC_TYPE_BOOT, &boot[sl], sizeof(boot[sl])))
-            return false;
-    }
-    if (had_limits && !write_record(CFG_REC_TYPE_LIMITS, &limits, sizeof(limits)))
-        return false;
-    return true;
-}
-
-void CfgStore_Init(void)
-{
-    memset(&s, 0, sizeof(s));
-    s.next_free_idx = CFG_REC_COUNT;
+    memset(o, 0, sizeof(*o));
+    o->next_free = CFG_REC_COUNT;
 
     for (uint32_t i = 0; i < CFG_REC_COUNT; i++) {
         cfg_record_t r;
 
         /* Hong ECC (mat dien GIUA luc ghi) -> bo qua, KHONG coi la o trong */
-        if (!rec_read(i, &r)) continue;
+        if (!rec_read(bank, i, &r)) continue;
 
-        if (rec_is_erased(&r)) {
-            s.next_free_idx = i;
-            break;
-        }
+        if (rec_is_erased(&r)) { o->next_free = i; break; }
         if (!rec_is_valid(&r)) continue;
 
-        if (r.seq > s.max_seq) s.max_seq = r.seq;
-        cache_apply(r.type, r.payload, r.len);
+        if (r.seq > o->max_seq) o->max_seq = r.seq;
+        if (r.type == CFG_REC_TYPE_COMMIT) {
+            o->has_commit = true;
+            if (r.seq > o->commit_seq) o->commit_seq = r.seq;
+        }
+        cache_apply(&o->c, r.type, r.payload, r.len);
     }
+}
+
+void CfgStore_Init(void)
+{
+    bank_scan_t sc[OTA_CFG_BANKS];
+
+    memset(&s, 0, sizeof(s));
+    s.next_free_idx = CFG_REC_COUNT;
+
+    for (uint8_t b = 0; b < OTA_CFG_BANKS; b++) scan_bank(b, &sc[b]);
+
+    if (!sc[0].has_commit && !sc[1].has_commit) {
+        /* May moi hoac ca 2 bank hong: dung bank 0, se xoa + COMMIT khi ghi lan dau */
+        s.bank = 0u;
+        return;
+    }
+
+    uint8_t pick;
+    if (sc[0].has_commit && sc[1].has_commit) pick = (sc[1].commit_seq > sc[0].commit_seq) ? 1u : 0u;
+    else                                      pick = sc[1].has_commit ? 1u : 0u;
+
+    s.bank          = pick;
+    s.committed     = true;
+    s.next_free_idx = sc[pick].next_free;
+    s.max_seq       = sc[pick].max_seq;
+    s.c             = sc[pick].c;
+
+    /* seq khong bao gio lui, ke ca khi bank con lai co seq cao hon */
+    if (sc[pick ^ 1u].max_seq > s.max_seq) s.max_seq = sc[pick ^ 1u].max_seq;
+}
+
+/* Ghi 1 ban ghi vao (bank, idx), doc lai so sanh. Khong dung cache. */
+static bool prog_record(uint8_t bank, uint32_t idx, uint32_t seq,
+                        uint8_t type, const void *payload, uint8_t len)
+{
+    cfg_record_t rec __attribute__((aligned(32)));
+    memset(&rec, 0, sizeof(rec));
+    rec.magic = CFG_REC_MAGIC;
+    rec.seq   = seq;
+    rec.type  = type;
+    rec.len   = len;
+    memcpy(rec.payload, payload, len);
+    rec.crc32 = rec_crc(&rec);
+
+    const flash_op_result_t r =
+        Flash_ProgramWords(rec_addr(bank, idx), (const uint8_t *)&rec, CFG_REC_SIZE);
+
+    cfg_record_t chk;
+    return r.ok && rec_read(bank, idx, &chk) && (memcmp(&chk, &rec, sizeof(rec)) == 0);
+}
+
+/* Them ban ghi vao cuoi bank dang ghi. Thu toi da 2 o: o dau loi thi bo qua
+ * (H7 khong cho ghi de flash-word da lap trinh -> o loi KHONG dung lai). */
+static bool append(uint8_t type, const void *payload, uint8_t len)
+{
+    for (uint8_t attempt = 0; attempt < 2u; attempt++) {
+        if (s.next_free_idx >= CFG_REC_COUNT) return false;
+
+        const uint32_t idx = s.next_free_idx++;
+        const uint32_t seq = ++s.max_seq;
+
+        if (prog_record(s.bank, idx, seq, type, payload, len)) return true;
+    }
+    return false;
+}
+
+static bool compact(void)
+{
+    const uint8_t old_bank = s.bank;
+    const uint8_t new_bank = (uint8_t)(old_bank ^ 1u);
+
+    if (!Flash_EraseSector(OTA_CFG_SECTOR(new_bank)).ok) return false;
+
+    /* Chuyen sang bank moi; neu that bai, tra lai bank cu (cache khong bi dong vao) */
+    const uint32_t save_free = s.next_free_idx;
+    const uint32_t save_seq  = s.max_seq;
+    const bool     save_com  = s.committed;
+
+    s.bank = new_bank;
+    s.next_free_idx = 0u;
+    s.committed = false;
+
+    bool ok = true;
+    for (ota_slot_t sl = OTA_SLOT_A; ok && sl < OTA_SLOT_COUNT; sl++) {
+        if (s.c.has_boot[sl]) ok = append(CFG_REC_TYPE_BOOT, &s.c.boot[sl], sizeof(s.c.boot[sl]));
+    }
+    if (ok && s.c.has_limits) ok = append(CFG_REC_TYPE_LIMITS, &s.c.limits, sizeof(s.c.limits));
+
+    const uint8_t dummy = 0xFFu;
+    if (ok) ok = append(CFG_REC_TYPE_COMMIT, &dummy, 1u);   /* CUOI CUNG */
+
+    if (!ok) {
+        s.bank = old_bank;
+        s.next_free_idx = save_free;
+        s.max_seq = save_seq;     /* seq da dung o bank hong khong con y nghia */
+        s.committed = save_com;
+        return false;
+    }
+
+    s.committed = true;
+    return true;
+}
+
+/* Bank chua co COMMIT (may moi): dam bao bank trong roi ghi COMMIT dau tien */
+static bool ensure_committed(void)
+{
+    if (s.committed) return true;
+
+    cfg_record_t r;
+    if (!rec_read(s.bank, 0u, &r) || !rec_is_erased(&r)) {
+        if (!Flash_EraseSector(OTA_CFG_SECTOR(s.bank)).ok) return false;
+    }
+    s.next_free_idx = 0u;
+
+    const uint8_t dummy = 0xFFu;
+    if (!append(CFG_REC_TYPE_COMMIT, &dummy, 1u)) return false;
+    s.committed = true;
+    return true;
 }
 
 static bool write_record(uint8_t type, const void *payload, uint8_t len)
 {
     if (len > CFG_PAYLOAD_MAX) return false;
 
-    /* Toi da 2 lan: o dau loi thi bo qua, thu o ke tiep */
-    for (uint8_t attempt = 0; attempt < 2u; attempt++) {
-        if (s.next_free_idx >= CFG_REC_COUNT) {
-            if (!compact()) return false;
-        }
+    if (!ensure_committed()) return false;
 
-        cfg_record_t rec __attribute__((aligned(32)));
-        memset(&rec, 0, sizeof(rec));
-        rec.magic = CFG_REC_MAGIC;
-        rec.seq   = ++s.max_seq;
-        rec.type  = type;
-        rec.len   = len;
-        memcpy(rec.payload, payload, len);
-        rec.crc32 = rec_crc(&rec);
+    if (s.next_free_idx >= CFG_REC_COUNT && !compact()) return false;
 
-        /* Tang idx TRUOC khi ghi: du ghi loi, o nay cung KHONG bao gio
-         * duoc dung lai (H7 khong cho ghi de flash-word da lap trinh). */
-        const uint32_t idx = s.next_free_idx++;
-
-        const flash_op_result_t r =
-            Flash_ProgramWords(OTA_CFG_BASE + idx * CFG_REC_SIZE,
-                               (const uint8_t *)&rec, CFG_REC_SIZE);
-
-        /* Doc lai qua guard, so sanh tung byte voi ban vua ghi */
-        cfg_record_t chk;
-        if (r.ok && rec_read(idx, &chk) && (memcmp(&chk, &rec, sizeof(rec)) == 0)) {
-            cache_apply(type, payload, len);
-            return true;
-        }
+    if (!append(type, payload, len)) {
+        /* 2 o lien tiep loi: thu chuyen bank mot lan */
+        if (!compact() || !append(type, payload, len)) return false;
     }
-    return false;
+    cache_apply(&s.c, type, payload, len);
+    return true;
 }
 
 /* ==========================================================================
  * API
  * ========================================================================== */
+bool CfgStore_NeedsErase(void)
+{
+    return !s.committed || (s.next_free_idx >= CFG_REC_COUNT);
+}
+
 bool CfgStore_ReadBoot(ota_slot_t sl, cfg_boot_payload_t *out)
 {
-    if (!Ota_SlotValid(sl) || !s.has_boot[sl]) return false;
-    *out = s.boot[sl];
+    if (!Ota_SlotValid(sl) || !s.c.has_boot[sl]) return false;
+    *out = s.c.boot[sl];
     return true;
 }
 
@@ -180,8 +282,8 @@ bool CfgStore_WriteBoot(ota_slot_t sl, uint32_t boot_count, uint8_t confirmed)
 
 bool CfgStore_ReadLimits(cfg_limits_payload_t *out)
 {
-    if (!s.has_limits) return false;
-    *out = s.limits;
+    if (!s.c.has_limits) return false;
+    *out = s.c.limits;
     return true;
 }
 

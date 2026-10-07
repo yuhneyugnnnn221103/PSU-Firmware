@@ -697,6 +697,9 @@ static bool fw_send_info(int port)
     return (tlm_send_aux(f, TLM_AUX_FRAME_SZ, port) > 0u);
 }
 
+/* Limits da ap vao INA228 nhung chua luu flash (doi nguon tat de khoi chan CPU) */
+static bool s_limits_dirty;
+
 static bool cfg_persist_limits(void)
 {
     cfg_limits_payload_t p;
@@ -721,6 +724,17 @@ static bool cfg_persist_limits(void)
 void Comm_CfgTask(void)
 {
     if (FwUpdate_IsBusy()) return;
+
+    if (s_limits_dirty && !Safety_PowerIsOn()) {
+        /* Thu lai toi da 1 lan/giay: moi lan ghi loi ton ban ghi flash */
+        static uint32_t t_retry;
+        const uint32_t now = HAL_GetTick();
+        if ((uint32_t)(now - t_retry) >= 1000u) {
+            t_retry = now;
+            if (cfg_persist_limits()) s_limits_dirty = false;
+        }
+    }
+
     if (!s_cfg_req.pending) return;
 
     /* ---- Pha 1: THUC THI - dung 1 lan cho moi lenh ---- */
@@ -740,7 +754,12 @@ void Comm_CfgTask(void)
                   == INA228_OK) ? TLM_ACK_OK : TLM_ACK_I2C_ERR;
 
             if (st == TLM_ACK_OK) {
-                (void)cfg_persist_limits();
+                /* Nguon ON: ghi flash co the phai xoa sector (chan CPU) -> hoan lai */
+                if (Safety_PowerIsOn() && CfgStore_NeedsErase()) {
+                    s_limits_dirty = true;
+                } else if (!cfg_persist_limits()) {
+                    s_limits_dirty = true;
+                }
             }
         }
 

@@ -65,6 +65,10 @@ static void reinit_stale_dev(uint32_t now)
 static void self_confirmed_task(uint32_t now)
 {
 	if (g_app.self_confirmed || (uint32_t)(now - g_app.t_boot) < SELF_CONFIRM_MS) return;
+
+	/* Xoa sector chan CPU (ke ca EXTI trip). Khi dau ra dang bat chi ghi neu
+	 * khong phai xoa; neu can xoa thi doi den khi nguon tat. */
+	if (Safety_PowerIsOn() && CfgStore_NeedsErase()) return;
 	if (CfgStore_WriteBoot(Ota_SlotRunning(), 0u, 1u)) {
 		g_app.self_confirmed = true;
 	}
