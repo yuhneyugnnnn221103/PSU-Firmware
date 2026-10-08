@@ -95,3 +95,13 @@ bool Ota_VectorOk(ota_slot_t s)
 
     return msp_ok && entry_ok;
 }
+
+bool Ota_ReadHeader(ota_slot_t s, ota_image_header_t *out)
+{
+    if (!Ota_SlotValid(s)) return false;
+
+    const uint32_t lo = g_ota_slots[s].base;
+    FlashGuard_Begin(lo, lo + OTA_SLOT_SIZE);
+    FlashGuard_CopyWords(out, lo, sizeof(*out));
+    return FlashGuard_End();
+}

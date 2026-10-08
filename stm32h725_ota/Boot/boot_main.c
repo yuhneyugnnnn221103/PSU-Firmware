@@ -2,91 +2,13 @@
 #include "boot_main.h"
 #include "ota_image.h"
 #include "cfg_store.h"
+#include "ota_select.h"
 #include "iwdg_hw.h"
 #include "boot_recovery.h"
 
-#define BOOT_MAX_ATTEMPTS   3u
-
-typedef struct {
-    bool     has_rec;
-    uint32_t boot_count;
-    bool     confirmed;
-} slot_state_t;
-
-static slot_state_t read_state(ota_slot_t sl)
+static void tick_wdg(void)
 {
-    slot_state_t st = { false, 0u, false };
-    cfg_boot_payload_t bp;
-
-    if (CfgStore_ReadBoot(sl, &bp)) {
-        st.has_rec    = true;
-        st.boot_count = bp.boot_count;
-        st.confirmed  = (bp.confirmed != 0u);
-    }
-    return st;
-}
-
-/* PC da ra lenh ROLLBACK khoi slot nay */
-static bool is_rejected(const slot_state_t *st)
-{
-    return st->has_rec && (st->boot_count == CFG_BOOT_COUNT_FORCE_FAIL);
-}
-
-/* Anh CHUA confirm va da thu du so lan ma khong tu confirm duoc */
-static bool is_exhausted(const slot_state_t *st)
-{
-    return st->has_rec && !st->confirmed && (st->boot_count >= BOOT_MAX_ATTEMPTS);
-}
-
-/* Anh moi cai hon (install_seq) thang; bang nhau thi so version */
-static bool newer(ota_slot_t b, ota_slot_t a)
-{
-    const ota_image_header_t *ha = Ota_Header(a);
-    const ota_image_header_t *hb = Ota_Header(b);
-
-    if (hb->install_seq != ha->install_seq) return hb->install_seq > ha->install_seq;
-    return hb->version > ha->version;
-}
-
-static ota_slot_t pick(const bool cand[OTA_SLOT_COUNT])
-{
-    ota_slot_t best = OTA_SLOT_NONE;
-
-    for (ota_slot_t sl = OTA_SLOT_A; sl < OTA_SLOT_COUNT; sl++) {
-        if (!cand[sl]) continue;
-        if ((best == OTA_SLOT_NONE) || newer(sl, best)) {
-            best = sl;
-        }
-    }
-    return best;
-}
-
-static ota_slot_t choose_slot(void)
-{
-    bool         valid[OTA_SLOT_COUNT];
-    bool         cand[OTA_SLOT_COUNT];
-    slot_state_t st[OTA_SLOT_COUNT];
-
-    for (ota_slot_t sl = OTA_SLOT_A; sl < OTA_SLOT_COUNT; sl++) {
-        valid[sl] = Ota_ImageValid(sl) && Ota_VectorOk(sl);   /* CRC32 toan anh */
-        IWDG_Refresh();
-        st[sl]   = read_state(sl);
-        cand[sl] = valid[sl] && !is_rejected(&st[sl]) && !is_exhausted(&st[sl]);
-    }
-
-    /* Muc 1: ung vien binh thuong */
-    ota_slot_t best = pick(cand);
-    if (best != OTA_SLOT_NONE) return best;
-
-    /* Muc 2: ca 2 da het luot thu -> bo qua dem, van ton trong ROLLBACK */
-    for (ota_slot_t sl = OTA_SLOT_A; sl < OTA_SLOT_COUNT; sl++) {
-        cand[sl] = valid[sl] && !is_rejected(&st[sl]);
-    }
-    best = pick(cand);
-    if (best != OTA_SLOT_NONE) return best;
-
-    /* Muc 3: con anh nao dung CRC thi chay, con hon treo board */
-    return pick(valid);
+    IWDG_Refresh();
 }
 
 static void jump_to_slot(ota_slot_t sl)
@@ -133,14 +55,18 @@ void Boot_Run(void)
 {
     CfgStore_Init();
 
-    const ota_slot_t sl = choose_slot();
+    /* Chi slot hop le, chua bi rollback va chua het luot moi duoc chon.
+     * Khong con muc "noi long": het luot = khong bao gio chon lai. */
+    const ota_slot_t sl = Ota_SelectSlot(tick_wdg);
     if (sl == OTA_SLOT_NONE) Boot_RecoveryRun();   /* khong tro ve */
 
     /* CHI dem luot thu cho anh chua confirm. Anh da confirm khong bao
      * gio bi ha cap vi reset (watchdog, mat dien, tat/bat nhanh). */
-    const slot_state_t st = read_state(sl);
-    if (!st.confirmed && (st.boot_count != CFG_BOOT_COUNT_FORCE_FAIL)) {
-        (void)CfgStore_WriteBoot(sl, st.boot_count + 1u, 0u);
+    cfg_boot_payload_t bp;
+    const bool has_rec = CfgStore_ReadBoot(sl, &bp);
+    if (!has_rec || !bp.confirmed) {
+        const uint32_t count = has_rec ? bp.boot_count : 0u;
+        (void)CfgStore_WriteBoot(sl, count + 1u, 0u);
     }
 
     IWDG_Refresh();

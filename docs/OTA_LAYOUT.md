@@ -29,6 +29,18 @@ ghi `COMMIT` cuối cùng. Bank cũ chỉ bị xoá ở lần compaction kế ti
 
 Kiểm thử: `make -C tests/host test` (flash giả, cắt điện tại từng thao tác).
 
+## Chọn slot khi khởi động (`shared_lib/ota_select.c`)
+Một slot chỉ được chọn khi **đồng thời**: ảnh hợp lệ (CRC32 + vector), chưa bị PC rollback
+(`boot_count != 0xFFFFFFFF`), và chưa hết lượt (đã confirm, hoặc `boot_count < 3`).
+Nhiều ứng viên: `install_seq` lớn hơn thắng, hoà thì `version` lớn hơn.
+
+- Bootloader tăng `boot_count` **trước** khi nhảy với ảnh chưa confirm → ảnh được thử đúng 3 lần;
+  lần reboot thứ 4 slot bị loại, **dù ảnh vẫn hợp lệ**.
+- Không còn mức "nới lỏng": nếu không còn slot nào đủ điều kiện → vào recovery.
+- Slot chỉ được chọn lại sau khi nạp lại (OTA hoặc recovery ghi lại boot record `count=0, confirmed=0`).
+- Hệ quả: các lần reset sớm (mất điện, brown-out, watchdog) trước khi app tự confirm (10 s)
+  cũng tiêu hao lượt thử.
+
 ## Recovery: nạp firmware trong bootloader khi cả hai slot hỏng
 Vào khi `choose_slot()` không tìm được slot nào có CRC32 + vector table hợp lệ.
 Bootloader nhận ảnh qua UART bằng **cùng giao thức FW_*** với app (`shared_lib/ota_proto.h`),
