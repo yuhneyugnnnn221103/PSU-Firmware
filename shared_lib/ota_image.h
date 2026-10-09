@@ -21,6 +21,9 @@ static inline const ota_image_header_t *Ota_Header(ota_slot_t s)
 	return (const ota_image_header_t *)g_ota_slots[s].base;
 }
 
+/* Doc header qua FlashGuard (an toan voi flash hong ECC). false neu loi doc. */
+bool Ota_ReadHeader(ota_slot_t s, ota_image_header_t *out);
+
 static inline uint32_t Ota_CodeBase(ota_slot_t s)
 {
 	return g_ota_slots[s].base + OTA_HEADER_SIZE;
