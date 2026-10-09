@@ -63,8 +63,8 @@ static ota_slot_t pick(const bool cand[OTA_SLOT_COUNT])
 
 static ota_slot_t choose_slot(void)
 {
-    bool         valid[OTA_SLOT_COUNT];
-    bool         cand[OTA_SLOT_COUNT];
+    bool valid[OTA_SLOT_COUNT];
+    bool cand[OTA_SLOT_COUNT];
     slot_state_t st[OTA_SLOT_COUNT];
 
     for (ota_slot_t sl = OTA_SLOT_A; sl < OTA_SLOT_COUNT; sl++) {
