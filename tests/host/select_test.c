@@ -76,6 +76,30 @@ int main(void)
     int boots=0; for(;;){ ota_slot_t s=Ota_SelectSlot(NULL); if(s==OTA_SLOT_NONE)break; cfg_boot_payload_t bp; uint32_t c=CfgStore_ReadBoot(s,&bp)?bp.boot_count:0; CfgStore_WriteBoot(s,c+1,0); boots++; if(boots>10)break; }
     CHECK(boots==(int)OTA_MAX_BOOT_ATTEMPTS,"so lan boot truoc khi bi loai = %d (mong doi %u)",boots,OTA_MAX_BOOT_ATTEMPTS);
 
+
+    /* 10. Ota_SlotBootable khop Ota_SelectSlot */
+    reset_all(); make_image(OTA_SLOT_A,5,1); make_image(OTA_SLOT_B,4,1);
+    CHECK(Ota_SlotBootable(OTA_SLOT_A) && Ota_SlotBootable(OTA_SLOT_B),"ca 2 bootable");
+    rec(OTA_SLOT_B,OTA_MAX_BOOT_ATTEMPTS,0);
+    CHECK(Ota_SlotBootable(OTA_SLOT_A) && !Ota_SlotBootable(OTA_SLOT_B),"B het luot -> khong bootable");
+
+    /* 11. Ota_CommitTrial: dem luot cho anh chua confirm, khong dem anh da confirm */
+    reset_all(); make_image(OTA_SLOT_A,5,1);
+    CHECK(Ota_CommitTrial(OTA_SLOT_A)==OTA_SLOT_A,"commit lan 1");
+    { cfg_boot_payload_t b; CHECK(CfgStore_ReadBoot(OTA_SLOT_A,&b)&&b.boot_count==1&&!b.confirmed,"count=1 sau lan 1"); }
+    rec(OTA_SLOT_A,9,1);
+    CHECK(Ota_CommitTrial(OTA_SLOT_A)==OTA_SLOT_A,"commit anh da confirm");
+    { cfg_boot_payload_t b; CHECK(CfgStore_ReadBoot(OTA_SLOT_A,&b)&&b.boot_count==9&&b.confirmed,"anh da confirm khong bi dem"); }
+
+    /* 12. Ghi bo dem loi: uu tien slot kia NEU no da confirm; neu khong thi van boot slot chon */
+    reset_all(); make_image(OTA_SLOT_A,9,2); make_image(OTA_SLOT_B,5,1);   /* A moi, chua confirm */
+    rec(OTA_SLOT_B,3,1);                                                    /* B cu, da confirm   */
+    force_prog_fail = 1;
+    CHECK(Ota_CommitTrial(OTA_SLOT_A)==OTA_SLOT_B,"ghi loi + B da confirm -> boot B");
+    reset_all(); make_image(OTA_SLOT_A,9,2); make_image(OTA_SLOT_B,5,1);
+    CHECK(Ota_CommitTrial(OTA_SLOT_A)==OTA_SLOT_A,"ghi loi + B chua confirm -> van boot A (khong bo thiet bi chet)");
+    force_prog_fail = 0;
+
     printf("select tests done, fails=%d\n",fails);
     return fails?1:0;
 }

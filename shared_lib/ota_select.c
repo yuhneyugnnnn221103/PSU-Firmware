@@ -1,7 +1,7 @@
 #include "ota_select.h"
 #include "cfg_store.h"
 
-static bool slot_bootable(ota_slot_t sl)
+bool Ota_SlotBootable(ota_slot_t sl)
 {
     cfg_boot_payload_t bp;
 
@@ -28,10 +28,28 @@ ota_slot_t Ota_SelectSlot(void (*tick)(void))
     ota_slot_t best = OTA_SLOT_NONE;
 
     for (ota_slot_t sl = OTA_SLOT_A; sl < OTA_SLOT_COUNT; sl++) {
-        const bool ok = slot_bootable(sl);
+        const bool ok = Ota_SlotBootable(sl);
         if (tick) tick();
         if (!ok) continue;
         if (best == OTA_SLOT_NONE || newer(sl, best)) best = sl;
     }
     return best;
+}
+
+ota_slot_t Ota_CommitTrial(ota_slot_t sl)
+{
+    cfg_boot_payload_t bp;
+    const bool has_rec = CfgStore_ReadBoot(sl, &bp);
+
+    if (has_rec && bp.confirmed) return sl;          /* anh da confirm: khong dem */
+
+    const uint32_t count = has_rec ? bp.boot_count : 0u;
+    if (CfgStore_WriteBoot(sl, count + 1u, 0u)) return sl;
+
+    /* Khong ghi duoc bo dem: trial khong con bao ve -> dung anh da biet la tot */
+    const ota_slot_t alt = Ota_Other(sl);
+    cfg_boot_payload_t ab;
+    if (Ota_SlotBootable(alt) && CfgStore_ReadBoot(alt, &ab) && ab.confirmed) return alt;
+
+    return sl;
 }

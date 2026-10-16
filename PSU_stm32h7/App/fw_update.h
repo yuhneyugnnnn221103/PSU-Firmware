@@ -76,7 +76,15 @@ bool FwUpdate_TakeTimeout(void);
  *  @retval 0 neu header khong hop le (vd nap tay qua SWD ma quen header). */
 uint32_t FwUpdate_RunningVersion(void);
 
-bool FwUpdate_RequestRollBack(void);
+/** Danh dau slot dang chay la hong va reset de bootloader chon slot kia.
+ *  @return TLM_FW_ACK_OK (se reset ~50 ms sau) | REFUSED (khong o SAFE_OFF) |
+ *          BUSY (dang OTA) | WRONG_SLOT (khong biet dang chay slot nao) |
+ *          NO_TARGET (slot kia khong the khoi dong) | PROG_FAIL (khong ghi duoc cfg) */
+uint8_t FwUpdate_RequestRollBack(void);
+
+/** Trang thai trial cua slot dang chay, de bao trong FW_INFO:
+ *  bit7 = da confirm, bit6..0 = boot_count (127 = bi rollback / lon hon). 0 neu khong co ban ghi. */
+uint8_t FwUpdate_RunningState(void);
 
 char FwUpdate_RunningSlot(void);   /* 'A'/'B', '?' neu link sai */
 

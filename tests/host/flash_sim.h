@@ -7,3 +7,4 @@ extern uint8_t sim[1024*1024];
 extern long ops, fail_at;
 extern jmp_buf sim_jb;
 extern long overwrite_errors;
+extern int force_prog_fail;

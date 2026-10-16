@@ -80,3 +80,17 @@ ghi không cần xoá (`CfgStore_NeedsErase()`); ngược lại hoãn tới khi 
 - **`Default_Handler` được sửa tay trong `PSU_stm32h7/Core/Startup/startup_stm32h725rgvx.s`**
   (thêm `bl Safety_ForceOff`). CubeMX sẽ ghi đè file này khi generate lại → phải sửa lại sau khi generate.
 - Test: `make -C tests/host safety_test` (safety.c thật + phần cứng giả).
+
+## Trial, tự xác nhận và rollback (nhóm D)
+- **Tự xác nhận (`App/self_test.c`)**: ảnh chỉ được confirm khi, *liên tục* trong `SELFTEST_WINDOW_MS`
+  (10 s): ≥ `SELFTEST_MIN_CH` kênh INA228 "tươi" và cấu hình đúng, và máy trạng thái safety đã rời
+  `SAFE_BOOT`. Điều kiện sai → đếm lại từ đầu. Trip bảo vệ **không** là tiêu chí thất bại.
+  Tuỳ chọn: `SELFTEST_MIN_CH` (mặc định 1), `SELFTEST_NEED_PC_LINK` (mặc định 0).
+- **Lượt thử**: mọi lần boot ảnh chưa confirm đều tốn 1 lượt (kể cả mất điện/brown-out/watchdog),
+  tối đa `OTA_MAX_BOOT_ATTEMPTS` = 3. Muốn nới lỏng: tăng hằng số này.
+- **Ghi bộ đếm lỗi** (`Ota_CommitTrial`): nếu không ghi được và slot kia đã confirm + khởi động được → boot slot kia;
+  nếu không thì vẫn boot slot đã chọn.
+- **`FW_INFO`** trả thêm byte 11: bit7 = đã confirm, bit6..0 = `boot_count` (127 = bị rollback).
+- **`FW_ROLLBACK`** nay có ACK (status: OK / REFUSED / BUSY / WRONG_SLOT / `NO_TARGET`=10 / PROG_FAIL), và chỉ
+  rollback khi slot kia thật sự khởi động được (`Ota_SlotBootable`).
+- Lỗi ghi flash trong OTA trả `PROG_FAIL` (9), `info` = mã lỗi HAL; `CRC_FAIL` dành cho sai CRC.

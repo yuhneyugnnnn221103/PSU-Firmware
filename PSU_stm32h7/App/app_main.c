@@ -3,6 +3,7 @@
 #include <ina228_driver.h>
 #include <led.h>
 #include <safety.h>
+#include <self_test.h>
 #include <wdg_manager.h>
 #include "main.h"
 #include "app_main.h"
@@ -13,7 +14,7 @@ extern I2C_HandleTypeDef hi2c1;
 
 #define DCM_PERIOD_MS		10u
 #define CFG_VERIFY_MS		250u
-#define SELF_CONFIRM_MS		10000u
+#define CONFIRM_RETRY_MS	1000u   /* ghi confirm loi thi thu lai moi chung nay */
 
 static ina228_dev_t g_devs[4] = {
 		{.addr7 = INA228_ADDR_CH1, .alert_port = DCM_CUR_ALRT1_GPIO_Port, .alert_pin = DCM_CUR_ALRT1_Pin },
@@ -23,7 +24,7 @@ static ina228_dev_t g_devs[4] = {
 };
 
 static struct {
-	uint32_t t_dcm, t_scan, t_cfg_verify, t_boot;
+	uint32_t t_dcm, t_scan, t_cfg_verify, t_confirm_try;
 	bool self_confirmed;
 } g_app;
 
@@ -64,11 +65,24 @@ static void reinit_stale_dev(uint32_t now)
 
 static void self_confirmed_task(uint32_t now)
 {
-	if (g_app.self_confirmed || (uint32_t)(now - g_app.t_boot) < SELF_CONFIRM_MS) return;
+	if (g_app.self_confirmed) return;
+
+	/* Dieu kien "chay duoc" (xem self_test.h): cam bien song + safety da khoi dong,
+	 * lien tuc SELFTEST_WINDOW_MS. Khong chi doi thoi gian troi qua. */
+	selftest_in_t in = { 0u, Safety_State(), Comm_PcLinkAlive(now) };
+	for (uint8_t i = 0; i < INA228_CH_COUNT; i++) {
+		if (ina228_is_fresh(&g_devs[i], now) && g_devs[i].cfg_ok) in.ch_ok++;
+	}
+	if (!SelfTest_Update(now, &in)) return;
 
 	/* Xoa sector chan CPU (ke ca EXTI trip). Khi dau ra dang bat chi ghi neu
 	 * khong phai xoa; neu can xoa thi doi den khi nguon tat. */
 	if (Safety_PowerIsOn() && CfgStore_NeedsErase()) return;
+
+	/* Ghi loi thi thu lai toi da 1 lan/giay (moi lan loi ton ban ghi flash) */
+	if ((uint32_t)(now - g_app.t_confirm_try) < CONFIRM_RETRY_MS) return;
+	g_app.t_confirm_try = now;
+
 	if (CfgStore_WriteBoot(Ota_SlotRunning(), 0u, 1u)) {
 		g_app.self_confirmed = true;
 	}
@@ -98,7 +112,7 @@ void App_Init(void)
 	cfg_boot_payload_t bp;
 	const ota_slot_t me = Ota_SlotRunning();
 	g_app.self_confirmed = (me == OTA_SLOT_NONE) || !CfgStore_ReadBoot(me, &bp) || (bp.confirmed != 0u);
-	g_app.t_boot = HAL_GetTick();
+	SelfTest_Reset();
 
 	HAL_Delay(5);
 }

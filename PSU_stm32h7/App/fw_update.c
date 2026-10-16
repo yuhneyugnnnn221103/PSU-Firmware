@@ -8,6 +8,7 @@
 #include "flash.h"
 #include "cfg_record.h"
 #include "ota_proto.h"
+#include "ota_select.h"
 
 /* Khung FW_* phai khop voi bootloader recovery (shared_lib/ota_proto.h) */
 _Static_assert(TLM_HDR1 == OTAP_HDR1 && TLM_HDR2 == OTAP_HDR2 &&
@@ -28,7 +29,10 @@ _Static_assert(TLM_FW_ACK_OK == OTAP_ST_OK && TLM_FW_ACK_REFUSED == OTAP_ST_REFU
                TLM_FW_ACK_BAD_SIZE == OTAP_ST_BAD_SIZE && TLM_FW_ACK_BAD_SEQ == OTAP_ST_BAD_SEQ &&
                TLM_FW_ACK_CRC_FAIL == OTAP_ST_CRC_FAIL && TLM_FW_ACK_BUSY == OTAP_ST_BUSY &&
                TLM_FW_ACK_NO_COMMIT_PENDING == OTAP_ST_NO_COMMIT && TLM_FW_ACK_ERASE_FAIL == OTAP_ST_ERASE_FAIL &&
-               TLM_FW_ACK_WRONG_SLOT == OTAP_ST_WRONG_SLOT && TLM_FW_ACK_PROG_FAIL == OTAP_ST_PROG_FAIL, "khung FW_*: ma trang thai lech");
+               TLM_FW_ACK_WRONG_SLOT == OTAP_ST_WRONG_SLOT && TLM_FW_ACK_PROG_FAIL == OTAP_ST_PROG_FAIL &&
+               TLM_FW_ACK_NO_TARGET == OTAP_ST_NO_TARGET, "khung FW_*: ma trang thai lech");
+_Static_assert(TLM_CMD_FW_ROLLBACK == OTAP_CMD_FW_ROLLBACK && TLM_FW_ACK_OFF_STATE == OTAP_ACK_OFF_STATE,
+               "khung FW_*: ROLLBACK/state lech");
 
 extern uint32_t g_pfnVectors;
 
@@ -209,7 +213,8 @@ uint8_t FwUpdate_Data(uint16_t seq, uint16_t chunk_len,
 
     if (!r.ok) {
         s.state = FWU_IDLE;
-        return TLM_FW_ACK_CRC_FAIL;
+        if (out_info) *out_info = r.hal_error;
+        return TLM_FW_ACK_PROG_FAIL;
     }
 
     /* CRC32 CHI phu chunk_len byte THAT (bo qua phan dem neu la chunk cuoi) */
@@ -274,7 +279,8 @@ uint8_t FwUpdate_End(uint32_t *out_info)
     flash_op_result_t r = Flash_ProgramWords(target_base(), (uint8_t *)&hdr, OTA_HEADER_SIZE);
     if (!r.ok) {
         s.state = FWU_IDLE;
-        return TLM_FW_ACK_CRC_FAIL;
+        if (out_info) *out_info = r.hal_error;
+        return TLM_FW_ACK_PROG_FAIL;
     }
 
 	if (!Ota_ImageValid(target_slot())) {
@@ -356,18 +362,30 @@ bool FwUpdate_TakeTimeout(void)
     return true;
 }
 
-bool FwUpdate_RequestRollBack(void)
+uint8_t FwUpdate_RequestRollBack(void)
 {
-	if (Safety_State() != SAFE_OFF)	return false;
-	if (s.state != FWU_IDLE)		return false;
+	if (Safety_State() != SAFE_OFF)	return TLM_FW_ACK_REFUSED;
+	if (s.state != FWU_IDLE)		return TLM_FW_ACK_BUSY;
+	if (my_slot() == OTA_SLOT_NONE)	return TLM_FW_ACK_WRONG_SLOT;
 
-	if (my_slot() == OTA_SLOT_NONE || !Ota_ImageValid(target_slot())) return false;
+	/* Chi rollback khi slot kia thuc su khoi dong duoc; neu khong bootloader se
+	 * khong con slot nao va vao recovery. */
+	if (!Ota_SlotBootable(target_slot())) return TLM_FW_ACK_NO_TARGET;
 
-	if (!CfgStore_WriteBoot(my_slot(), CFG_BOOT_COUNT_FORCE_FAIL, 0u))	return false;
+	if (!CfgStore_WriteBoot(my_slot(), CFG_BOOT_COUNT_FORCE_FAIL, 0u))	return TLM_FW_ACK_PROG_FAIL;
 
 	s.commit_pending = true;
 	s.commit_at_ms = HAL_GetTick() + FWU_COMMIT_DELAY_MS;
-	return true;
+	return TLM_FW_ACK_OK;
+}
+
+uint8_t FwUpdate_RunningState(void)
+{
+	cfg_boot_payload_t bp;
+	if (my_slot() == OTA_SLOT_NONE || !CfgStore_ReadBoot(my_slot(), &bp)) return 0u;
+
+	if (bp.boot_count >= OTAP_STATE_COUNT_MAX) bp.boot_count = OTAP_STATE_COUNT_MAX;   /* gom ca FORCE_FAIL */
+	return (uint8_t)((bp.confirmed ? OTAP_STATE_CONFIRMED : 0u) | (uint8_t)bp.boot_count);
 }
 
 char FwUpdate_RunningSlot(void)

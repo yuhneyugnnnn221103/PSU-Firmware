@@ -18,6 +18,7 @@
 #define OTAP_CMD_FW_COMMIT    0x93u
 #define OTAP_CMD_FW_ACK       0x94u
 #define OTAP_CMD_FW_INFO      0x95u
+#define OTAP_CMD_FW_ROLLBACK  0x96u
 
 #define OTAP_CHUNK_MAX        256u
 #define OTAP_BEGIN_SZ         20u
@@ -37,6 +38,9 @@
 #define OTAP_ACK_OFF_STATUS   5u
 #define OTAP_ACK_OFF_INFO     6u
 #define OTAP_ACK_OFF_SLOT     10u
+#define OTAP_ACK_OFF_STATE    11u   /* CHI tra loi FW_INFO: bit7 = da confirm, bit6..0 = boot_count (127 = bi rollback) */
+#define OTAP_STATE_CONFIRMED  0x80u
+#define OTAP_STATE_COUNT_MAX  0x7Fu
 
 #define OTAP_ST_OK            0u
 #define OTAP_ST_REFUSED       1u
@@ -48,6 +52,7 @@
 #define OTAP_ST_ERASE_FAIL    7u
 #define OTAP_ST_WRONG_SLOT    8u
 #define OTAP_ST_PROG_FAIL     9u
+#define OTAP_ST_NO_TARGET     10u   /* ROLLBACK: slot kia khong the khoi dong (hong / het luot / da rollback) */
 
 /* Tra loi FW_INFO o che do recovery: byte slot = 'R' (App tra 'A'/'B') */
 #define OTAP_SLOT_RECOVERY    'R'

@@ -57,17 +57,12 @@ void Boot_Run(void)
 
     /* Chi slot hop le, chua bi rollback va chua het luot moi duoc chon.
      * Khong con muc "noi long": het luot = khong bao gio chon lai. */
-    const ota_slot_t sl = Ota_SelectSlot(tick_wdg);
+    ota_slot_t sl = Ota_SelectSlot(tick_wdg);
     if (sl == OTA_SLOT_NONE) Boot_RecoveryRun();   /* khong tro ve */
 
-    /* CHI dem luot thu cho anh chua confirm. Anh da confirm khong bao
-     * gio bi ha cap vi reset (watchdog, mat dien, tat/bat nhanh). */
-    cfg_boot_payload_t bp;
-    const bool has_rec = CfgStore_ReadBoot(sl, &bp);
-    if (!has_rec || !bp.confirmed) {
-        const uint32_t count = has_rec ? bp.boot_count : 0u;
-        (void)CfgStore_WriteBoot(sl, count + 1u, 0u);
-    }
+    /* Dem luot thu cho anh chua confirm (anh da confirm khong bi dem). Neu khong
+     * ghi duoc bo dem va slot kia da confirm thi khoi dong slot kia. */
+    sl = Ota_CommitTrial(sl);
 
     IWDG_Refresh();
     jump_to_slot(sl);

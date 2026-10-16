@@ -78,7 +78,8 @@
 #define TLM_FW_ACK_OFF_INFO       6u   /* DATA: last_seq da nhan; END: crc tinh duoc;
                                         * INFO: version dang chay              */
 #define TLM_FW_ACK_OFF_SLOT       10u  /* CHI dung cho tra loi FW_INFO: 'A'/'B'.
-                                        * Byte 10-11 con trong (CRC o 12).      */
+                                        * Byte 11: trang thai trial (xem STATE). CRC o 12. */
+#define TLM_FW_ACK_OFF_STATE      11u  /* CHI FW_INFO: bit7 = da confirm, bit6..0 = boot_count (127 = bi rollback) */
 #define TLM_FW_ACK_SZ             TLM_AUX_FRAME_SZ   /* = 16 */
 
 #define TLM_FW_ACK_OK               0u
@@ -91,6 +92,7 @@
 #define TLM_FW_ACK_ERASE_FAIL       7u   /* xoa sector that bai, info = HAL_FLASH_GetError() */
 #define TLM_FW_ACK_WRONG_SLOT       8u   /* anh link cho slot KIA, info = Reset_Handler doc duoc */
 #define TLM_FW_ACK_PROG_FAIL        9u   /* ghi flash that bai, info = HAL_FLASH_GetError() / dia chi */
+#define TLM_FW_ACK_NO_TARGET        10u  /* ROLLBACK: slot kia khong the khoi dong */
 
 /* Buffer RX phai chua duoc khung lon nhat trong TOAN BO protocol - hien tai
  * la FW_DATA (268 byte), lon hon nhieu TLM_CFG_FRAME_SZ (20 byte) truoc day.

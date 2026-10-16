@@ -13,11 +13,13 @@ jmp_buf sim_jb;
 
 static void power_fail(void){ longjmp(sim_jb,1); }
 
-long overwrite_errors;   /* so lan co ghi len flash-word chua xoa (H7 khong cho) */
+long overwrite_errors;
+int force_prog_fail;      /* != 0: moi lan ghi tra loi (mo phong flash/cfg hong) */   /* so lan co ghi len flash-word chua xoa (H7 khong cho) */
 
 flash_op_result_t Flash_ProgramWords(uint32_t addr, const uint8_t *d, uint32_t len)
 {
     flash_op_result_t r = {true,0};
+    if (force_prog_fail) { r.ok = false; r.hal_error = 0x40; return r; }
     for (uint32_t w = 0; w < len/32; w++) {
         if (ops++ == fail_at) power_fail();          /* mat dien truoc flash-word nay */
         uint8_t *p = sim + (addr - 0x08000000u) + 32*w;

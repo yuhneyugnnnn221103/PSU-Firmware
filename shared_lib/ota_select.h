@@ -18,4 +18,14 @@
  *  @retval OTA_SLOT_NONE neu khong con slot nao -> bootloader vao recovery */
 ota_slot_t Ota_SelectSlot(void (*tick)(void));
 
+/** Slot co the khoi dong khong (dieu kien nhu Ota_SelectSlot, cho 1 slot). */
+bool Ota_SlotBootable(ota_slot_t sl);
+
+/** Goi NGAY TRUOC khi nhay vao `sl` (da chon boi Ota_SelectSlot): neu anh chua
+ *  confirm thi ghi boot_count+1. Neu ghi that bai (flash/cfg hong) thi loi
+ *  bao ve trial mat tac dung -> uu tien slot kia NEU no da confirm va khoi dong
+ *  duoc; khong co thi van boot `sl` (khong de thiet bi chet).
+ *  @return slot se thuc su khoi dong */
+ota_slot_t Ota_CommitTrial(ota_slot_t sl);
+
 #endif /* OTA_SELECT_H_ */

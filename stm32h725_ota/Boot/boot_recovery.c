@@ -53,6 +53,7 @@ static void send_ack(uint8_t port, uint8_t cmd, uint8_t status, uint32_t info)
     f[OTAP_ACK_OFF_STATUS] = status;
     put_be32(&f[OTAP_ACK_OFF_INFO], info);
     f[OTAP_ACK_OFF_SLOT]   = (uint8_t)OTAP_SLOT_RECOVERY;
+    f[OTAP_ACK_OFF_STATE]  = 0u;     /* recovery: khong co anh dang chay */
 
     const uint16_t crc = Crc16_Compute(&f[2], OTAP_ACK_SZ - 4u - 2u);
     f[OTAP_ACK_SZ - 4u] = (uint8_t)(crc >> 8);

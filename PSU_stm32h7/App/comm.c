@@ -436,9 +436,11 @@ static void rx_exec(uint8_t p, const uint8_t *f, uint16_t n)
         (void)fw_send_info(p);
         break;
 
-    case TLM_CMD_FW_ROLLBACK:
-    	(void) FwUpdate_RequestRollBack();
-    	break;
+    case TLM_CMD_FW_ROLLBACK: {
+        const uint8_t st = FwUpdate_RequestRollBack();
+        (void)fw_send_ack(p, TLM_CMD_FW_ROLLBACK, st, 0u);   /* OK -> reset ~50 ms sau */
+        break;
+    }
 
     default:
         s_stats.rx_badframe[p]++;
@@ -692,6 +694,7 @@ static bool fw_send_info(int port)
     f[TLM_FW_ACK_OFF_STATUS] = TLM_FW_ACK_OK;
     put_be(&f[TLM_FW_ACK_OFF_INFO], FwUpdate_RunningVersion(), 4);
     f[TLM_FW_ACK_OFF_SLOT]   = (uint8_t)FwUpdate_RunningSlot();
+    f[TLM_FW_ACK_OFF_STATE]  = FwUpdate_RunningState();
 
     aux_seal(f);
     return (tlm_send_aux(f, TLM_AUX_FRAME_SZ, port) > 0u);
