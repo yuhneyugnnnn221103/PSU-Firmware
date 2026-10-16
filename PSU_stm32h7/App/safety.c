@@ -117,6 +117,26 @@ static uint16_t active_mask(void)
     return m;
 }
 
+/* Trip den tu duong nhanh (ISR) chua biet ma loi. Sau SAFE_SETTLE_MS thi vet
+ * lai tu diag da duoc ina228_alert_process() cap nhat. Dung chung cho TRIPPED
+ * va LOCKOUT: lan trip thu N vao LOCKOUT ngay, nhung van phai co ma loi. */
+static void resolve_trip_code(uint32_t now, uint16_t any_fault, uint8_t fault_ch,
+                              bool dcm_fault)
+{
+    if (s.code != FCODE_NONE) return;
+    if ((uint32_t)(now - s.t_trip) < SAFE_SETTLE_MS) return;
+
+    if (any_fault != 0u) {
+        s.code      = classify(any_fault);
+        s.trip_mask = fault_ch;
+    } else if (dcm_fault) {
+        s.code = FCODE_DCM;
+    } else {
+        /* Chan ALERT da kich nhung I2C khong xac nhan duoc bit nao */
+        s.code = FCODE_BUS;
+    }
+}
+
 /* ==========================================================================
  * KHOI TAO
  * ========================================================================== */
@@ -296,21 +316,10 @@ void Safety_Task(uint32_t now)
     case SAFE_TRIPPED:
         pwr_write(false);                /* ghi lai moi vong, phong glitch */
 
-        /* Trip den tu duong nhanh: chua biet ma loi. Cho V_bus xa xong roi
-         * doc lai diag da duoc ina228_alert_process() cap nhat. */
-        if (s.code == FCODE_NONE &&
-            (uint32_t)(now - s.t_trip) >= SAFE_SETTLE_MS) {
-            if (any_fault != 0u) {
-                s.code      = classify(any_fault);
-                s.trip_mask = fault_ch;
-            } else if (dcm_fault) {
-                s.code = FCODE_DCM;
-            } else {
-                /* Chan ALERT da kich nhung I2C khong xac nhan duoc bit nao */
-                s.code = FCODE_BUS;
-            }
-        }
+        resolve_trip_code(now, any_fault, fault_ch, dcm_fault);
 
+        /* Du so lan trip lien tiep -> khoa NGAY (khong doi co ma loi, de PC khong
+         * lach duoc bang CLR_FAULT trong cua so phan loai). */
         if (s.trip_count >= SAFE_TRIP_LOCKOUT_N) {
             goto_state(SAFE_LOCKOUT, now);
         }
@@ -318,6 +327,7 @@ void Safety_Task(uint32_t now)
 
     case SAFE_LOCKOUT:
         pwr_write(false);
+        resolve_trip_code(now, any_fault, fault_ch, dcm_fault);
         break;
 
     default:
@@ -358,17 +368,29 @@ bool Safety_RequestPower(bool on)
 
 void Safety_ClearFault(void)
 {
+    s.pc_wants_on = false;               /* KHONG tu dong bat lai nguon */
+
+    /* LOCKOUT: chi thoat duoc bang reset phan cung (co y). Giu nguyen ma loi,
+     * trip_mask va co sticky de con chan doan. */
+    if (s.state == SAFE_LOCKOUT) return;
+
+    /* Vua trip lan thu N nhung Task chua kip chuyen sang LOCKOUT (CLR_FAULT chen
+     * vao giua 2 vong): khoa luon, khong cho ve OFF. */
+    if (s.state == SAFE_TRIPPED && s.trip_count >= SAFE_TRIP_LOCKOUT_N) {
+        goto_state(SAFE_LOCKOUT, HAL_GetTick());
+        return;
+    }
+
     sticky_clear_all();
 
     s.code        = FCODE_NONE;
     s.trip_mask   = 0u;
-    s.pc_wants_on = false;               /* KHONG tu dong bat lai nguon */
 
     if (s.state == SAFE_TRIPPED) {
-        s.trip_count = 0u;
+        /* KHONG xoa trip_count: chi reset sau SAFE_STABLE_MS chay on dinh o
+         * SAFE_ON, neu khong PC thu lai vo han vao mot su co that. */
         goto_state(SAFE_OFF, HAL_GetTick());
     }
-    /* SAFE_LOCKOUT: chi thoat duoc bang reset phan cung. Co y. */
 }
 
 /* ==========================================================================

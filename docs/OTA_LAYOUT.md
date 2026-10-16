@@ -70,3 +70,13 @@ Test host: `make -C tests/host test` (`recovery_test`: giao thức + cắt đi�
 ## Ghi flash khi đầu ra đang bật
 Xoá sector chặn CPU (kể cả ISR trip). App chỉ ghi cfg khi đầu ra bật nếu việc
 ghi không cần xoá (`CfgStore_NeedsErase()`); ngược lại hoãn tới khi nguồn tắt.
+
+## Máy trạng thái an toàn: khoá (LOCKOUT) và lưu ý khi dùng CubeMX
+- `SAFE_TRIP_LOCKOUT_N` (3) lần trip liên tiếp → `SAFE_LOCKOUT`, chỉ thoát bằng reset phần cứng.
+  `CLR_FAULT` **không** reset bộ đếm trip (chỉ reset sau `SAFE_STABLE_MS` chạy ổn định ở `SAFE_ON`)
+  và bị bỏ qua trong `SAFE_LOCKOUT`; mã lỗi vẫn được phân loại sau khi khoá.
+- Mọi fault không phục hồi được đều gọi `Safety_ForceOff()` (cắt PWR_EN) trước khi chờ IWDG:
+  HardFault / MemManage / UsageFault / BusFault / NMI / `Error_Handler` / `Default_Handler`.
+- **`Default_Handler` được sửa tay trong `PSU_stm32h7/Core/Startup/startup_stm32h725rgvx.s`**
+  (thêm `bl Safety_ForceOff`). CubeMX sẽ ghi đè file này khi generate lại → phải sửa lại sau khi generate.
+- Test: `make -C tests/host safety_test` (safety.c thật + phần cứng giả).

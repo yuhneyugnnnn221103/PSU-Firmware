@@ -114,7 +114,9 @@ void Safety_Task(uint32_t now_ms);
 bool Safety_RequestPower(bool on);
 
 /** @brief Xu ly lenh 0x8B CLR_FAULT tu PC. Xoa latch, ve SAFE_OFF.
- *         KHONG tu dong bat lai nguon: PC phai gui them PWR_CTRL(on). */
+ *         KHONG tu dong bat lai nguon: PC phai gui them PWR_CTRL(on).
+ *         KHONG reset bo dem trip (chi reset sau SAFE_STABLE_MS o SAFE_ON).
+ *         O SAFE_LOCKOUT: bi bo qua (chi thoat bang reset phan cung). */
 void Safety_ClearFault(void);
 
 /** @brief Cat PWR_EN ngay, KHONG phu thuoc state/HAL. Dung trong fault handler. */

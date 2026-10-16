@@ -113,6 +113,9 @@ LoopForever:
 */
     .section  .text.Default_Handler,"ax",%progbits
 Default_Handler:
+  /* PSU (sua tay, CubeMX se ghi de khi generate lai - xem docs/OTA_LAYOUT.md):
+   * cat PWR_EN truoc khi treo cho IWDG. Safety_ForceOff o App/safety.c. */
+  bl  Safety_ForceOff
 Infinite_Loop:
   b  Infinite_Loop
   .size  Default_Handler, .-Default_Handler
