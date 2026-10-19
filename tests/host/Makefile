@@ -20,17 +20,22 @@ safety_test: safety_test.c $(APP)/safety.c
 psu_frame_test: psu_frame_test.c $(SH)/psu_frame.c $(SH)/crc16_ccitt.c
 	$(CC) $(CFLAGS) $^ -o $@
 
+APPSRC = ../../PSU_stm32h7/App
+psu_logic_test: psu_logic_test.c $(APPSRC)/psu_trip.c $(APPSRC)/psu_monitor.c $(APPSRC)/psu_cfg.c $(SH)/psu_frame.c $(SH)/cfg_store.c $(COMMON)
+	$(CC) $(CFLAGS) -I$(APPSRC) -I../../PSU_stm32h7/BSP $^ -o $@
+
 recovery_test: recovery_test.c ../../stm32h725_ota/Boot/boot_recovery.c $(SH)/psu_frame.c $(COMMON) $(SH)/cfg_store.c
 	$(CC) $(CFLAGS) $^ -o $@
 
-test: cfg_store_test recovery_test select_test safety_test self_test_test psu_frame_test
+test: cfg_store_test recovery_test select_test safety_test self_test_test psu_frame_test psu_logic_test
 	./cfg_store_test
 	./recovery_test
 	./select_test
 	./safety_test
 	./self_test_test
 	./psu_frame_test
+	./psu_logic_test
 
 clean:
-	rm -f cfg_store_test recovery_test select_test safety_test self_test_test psu_frame_test
+	rm -f cfg_store_test recovery_test select_test safety_test self_test_test psu_frame_test psu_logic_test
 .PHONY: test clean
