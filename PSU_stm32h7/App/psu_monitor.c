@@ -23,21 +23,11 @@ void PsuMon_Build(uint8_t *f, const psu_mon_t *m)
 
     uint8_t *x = &f[PSU_MON_OFF_SPARE];
     x[0] = m->safe_state;
-    x[1] = (uint8_t)((m->pwr_on ? 0x01u : 0u) | (m->pc_wants_on ? 0x02u : 0u));
+    x[1] = m->pwr_on ? 0x01u : 0x00u;
     x[2] = m->trip_count;
-    x[3] = m->fault_code;
-    x[4] = m->fresh_mask;
-    x[5] = m->cfgok_mask;
-    x[6] = m->dcm_mask;
-    x[7] = m->cfg_stored ? 0x01u : 0x00u;
-    for (uint8_t c = 0; c < 4u; c++) {
-        x[8u + 2u * c]      = (uint8_t)(m->diag[c] >> 8);
-        x[8u + 2u * c + 1u] = (uint8_t)m->diag[c];
-    }
-    x[16] = (uint8_t)m->slot;
-    x[17] = m->trial_state;
-    x[18] = (uint8_t)(m->version >> 24); x[19] = (uint8_t)(m->version >> 16);
-    x[20] = (uint8_t)(m->version >> 8);  x[21] = (uint8_t)m->version;
+    x[3] = (uint8_t)m->slot;
+    x[4] = (uint8_t)(m->version >> 24); x[5] = (uint8_t)(m->version >> 16);
+    x[6] = (uint8_t)(m->version >> 8);  x[7] = (uint8_t)m->version;
 
     Psu_FrameSeal(f, PSU_LEN_MONITOR);
 }

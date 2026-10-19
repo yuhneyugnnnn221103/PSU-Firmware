@@ -31,18 +31,16 @@ và các **mở rộng / khác biệt** so với file đó. Code: `shared_lib/ps
   Giá trị là **3 byte thanh ghi CURRENT / VBUS nguyên bản** (dữ liệu ở bit 23..4): phía giao diện tự dịch phải 4 bit và xử lý dấu
   (dòng có dấu, áp không dấu). Kênh INA không "tươi" (mất dữ liệu) gửi `00 00 00`.
 - 4 cụm DCM, RTC: `00` (chưa có cảm biến / RTC). 10 byte **Trip**: xem mục 5.
-- **Vùng dự phòng 24 byte** (byte 239..262 theo cách đếm của tài liệu) là **mở rộng của firmware**:
+- **Vùng dự phòng 24 byte** (byte 239..262 theo cách đếm của tài liệu) là **mở rộng của firmware**, chỉ giữ các mục:
 
 | Offset | Nội dung |
 |---|---|
 | +0 | `safe_state` (0 BOOT, 1 OFF, 2 ARMING, 3 ON, 4 TRIPPED, 5 LOCKOUT) |
-| +1 | bit0 PWR_EN đang bật; bit1 PC đang yêu cầu bật |
-| +2 | số lần trip liên tiếp; +3 fault_code (xem LED) |
-| +4 / +5 / +6 | mask kênh INA còn tươi / cấu hình đúng / chân FT của DCM đang báo lỗi |
-| +7 | bit0 = cấu hình PSU đã lưu ở Flash (0 = đang dùng mặc định) |
-| +8..+15 | DIAG_ALRT tích luỹ của INA1..4 (2 byte BE mỗi cái) |
-| +16 | slot đang chạy (`A`/`B`) ; +17 trạng thái trial (bit7 đã confirm, bit6..0 boot_count) |
-| +18..+21 | version ảnh đang chạy (u32 BE) ; +22..+23 = 0 |
+| +1 | trạng thái PWR_EN (1 = đang bật, 0 = tắt; trạng thái logic của chân) |
+| +2 | số lần trip liên tiếp |
+| +3 | slot firmware đang chạy (`A` / `B`) |
+| +4..+7 | version firmware đang chạy (u32 BE) |
+| +8..+23 | 0 |
 
 ## 3. Điều khiển `01 01`
 Phần cứng hiện tại: **một chân PWR_EN = cụm 1** (đóng 4 DCM). Chỉ **bit0** của Mask điều khiển PWR_EN; bit 1..3 bỏ qua.

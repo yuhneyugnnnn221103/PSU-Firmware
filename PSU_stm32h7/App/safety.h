@@ -137,6 +137,5 @@ fault_code_t Safety_Code(void);
 uint8_t      Safety_TripMask(void);   /* bit i = kenh i gop phan gay trip */
 bool         Safety_PowerIsOn(void);  /* trang thai LOGIC cua PWR_EN      */
 uint8_t      Safety_TripCount(void);  /* so lan trip lien tiep (khoa LOCKOUT) */
-bool         Safety_PcWantsOn(void);  /* PC dang yeu cau bat (khac trang thai that) */
 
 #endif /* SAFETY_H_ */

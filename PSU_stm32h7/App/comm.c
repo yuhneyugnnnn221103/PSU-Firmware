@@ -233,19 +233,12 @@ static bool send_monitor(uint8_t port)
         if (d == NULL) continue;
         m.cur24[i]  = d->raw.current_reg24;
         m.vbus24[i] = d->raw.vbus_reg24;
-        m.diag[i]   = d->diag_sticky;
         if (ina228_is_fresh(d, now)) m.fresh_mask |= (uint8_t)(1u << i);
-        if (d->cfg_ok)               m.cfgok_mask |= (uint8_t)(1u << i);
     }
-    m.dcm_mask    = s_dcm_fault;
     m.safe_state  = (uint8_t)Safety_State();
-    m.fault_code  = (uint8_t)Safety_Code();
     m.trip_count  = Safety_TripCount();
     m.pwr_on      = Safety_PowerIsOn();
-    m.pc_wants_on = Safety_PcWantsOn();
-    m.cfg_stored  = PsuCfg_IsStored();
     m.slot        = FwUpdate_RunningSlot();
-    m.trial_state = FwUpdate_RunningState();
     m.version     = FwUpdate_RunningVersion();
     m.trip        = PsuTrip_Bytes();
 

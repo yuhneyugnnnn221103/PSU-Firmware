@@ -10,14 +10,13 @@
  * Gia tri INA gui NGUYEN 3 byte thanh ghi CURRENT / VBUS (du lieu o bit 23..4): phia giao dien tu
  * dich phai 4 bit va xu ly dau. Cum DCM, RTC: 00 (khong co cam bien).
  *
- * Vung du phong 24 byte (byte 238..261, 0-based) la MO RONG CUA FIRMWARE:
- *   +0  safe_state (SAFE_*)         +1  bit0 PWR_EN dang bat, bit1 PC dang yeu cau bat
- *   +2  so lan trip lien tiep       +3  fault_code (FCODE_*)
- *   +4  mask kenh INA con tuoi      +5  mask kenh INA cau hinh dung
- *   +6  mask chan FT cua DCM        +7  bit0 = cau hinh PSU da luu o Flash (0 = dang dung mac dinh)
- *   +8..+15  DIAG_ALRT tich luy cua INA1..4 (moi cai 2 byte BE)
- *   +16 slot dang chay ('A'/'B'/'?')  +17 trang thai trial (bit7 confirm, bit6..0 boot_count)
- *   +18..+21 version anh dang chay (u32 BE)   +22..+23 = 0 */
+ * Vung du phong 24 byte (byte 238..261, 0-based) la MO RONG CUA FIRMWARE, chi giu cac muc sau:
+ *   +0  safe_state (SAFE_BOOT 0, OFF 1, ARMING 2, ON 3, TRIPPED 4, LOCKOUT 5)
+ *   +1  trang thai PWR_EN (1 = dang bat, 0 = tat; trang thai LOGIC cua chan)
+ *   +2  so lan trip lien tiep
+ *   +3  slot firmware dang chay ('A' / 'B' / '?')
+ *   +4..+7  version firmware dang chay (u32 BE)
+ *   +8..+23 = 0 */
 
 #define PSU_MON_OFF_SUPPLY   197u
 #define PSU_MON_OFF_RTC      221u
@@ -27,18 +26,11 @@
 typedef struct {
     uint32_t cur24[4];
     uint32_t vbus24[4];
-    uint16_t diag[4];
-    uint8_t  fresh_mask;
-    uint8_t  cfgok_mask;
-    uint8_t  dcm_mask;
+    uint8_t  fresh_mask;       /* kenh INA nao co du lieu moi (kenh khong tuoi gui 00 00 00) */
     uint8_t  safe_state;
-    uint8_t  fault_code;
     uint8_t  trip_count;
     bool     pwr_on;
-    bool     pc_wants_on;
-    bool     cfg_stored;
     char     slot;
-    uint8_t  trial_state;
     uint32_t version;
     const uint8_t *trip;       /* PSU_TRIP_BYTES byte */
 } psu_mon_t;

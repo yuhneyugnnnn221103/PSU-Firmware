@@ -101,9 +101,8 @@ static void test_monitor(void)
 {
     psu_mon_t m; memset(&m,0,sizeof m);
     uint8_t trip[PSU_TRIP_BYTES]; for (int i=0;i<10;i++) trip[i]=(uint8_t)(0xA0+i);
-    for (int c=0;c<4;c++){ m.cur24[c]=0x112233u+c; m.vbus24[c]=0x445566u+c; m.diag[c]=(uint16_t)(0x0100*(c+1)+c); }
-    m.fresh_mask=0x0D; m.cfgok_mask=0x0F; m.dcm_mask=0x02; m.safe_state=3; m.fault_code=2; m.trip_count=1;
-    m.pwr_on=true; m.pc_wants_on=true; m.cfg_stored=true; m.slot='B'; m.trial_state=0x82; m.version=0xAABBCCDD; m.trip=trip;
+    for (int c=0;c<4;c++){ m.cur24[c]=0x112233u+c; m.vbus24[c]=0x445566u+c; }
+    m.fresh_mask=0x0D; m.safe_state=3; m.trip_count=2; m.pwr_on=true; m.slot='B'; m.version=0xAABBCCDD; m.trip=trip;
 
     uint8_t f[PSU_LEN_MONITOR]; PsuMon_Build(f,&m);
     CHECK(f[0]==0xAB && f[1]==0xCD && f[2]==0x81 && f[3]==0x81 && f[4]==PSU_ADDR, "header 81 81 + dia chi");
@@ -116,10 +115,14 @@ static void test_monitor(void)
     int zero=1; for (int i=5;i<197;i++) if (f[i]) zero=0; CHECK(zero, "4 cum DCM = 0 (byte 6..197)");
     zero=1; for (int i=221;i<228;i++) if (f[i]) zero=0; CHECK(zero, "RTC = 0");
     CHECK(memcmp(&f[228], trip, 10)==0, "10 trip byte o 229..238");
-    CHECK(f[238]==3 && f[239]==3 && f[240]==1 && f[241]==2 && f[242]==0x0D && f[243]==0x0F && f[244]==0x02 && f[245]==1, "du phong +0..+7");
-    CHECK(f[246]==0x01 && f[247]==0x00 && f[248]==0x02 && f[249]==0x01 && f[252]==0x04 && f[253]==0x03, "DIAG tung kenh");
-    CHECK(f[254]=='B' && f[255]==0x82 && f[256]==0xAA && f[259]==0xDD && f[260]==0 && f[261]==0, "slot, trial, version");
+    /* vung du phong 24 byte (byte 239..262): chi giu safe_state, PWR_EN, trip count, slot, version */
+    CHECK(f[238]==3 && f[239]==1 && f[240]==2 && f[241]=='B', "du phong: safe_state, PWR_EN, trip count, slot");
+    CHECK(f[242]==0xAA && f[243]==0xBB && f[244]==0xCC && f[245]==0xDD, "du phong: version BE");
+    zero=1; for (int i=246;i<262;i++) if (f[i]) zero=0; CHECK(zero, "phan con lai cua vung du phong = 0");
     CHECK(f[262]*256+f[263] == Psu_Crc16(f,PSU_LEN_MONITOR) && f[264]==0xE1 && f[265]==0xE2, "CRC + duoi o cuoi");
+
+    m.pwr_on=false; m.safe_state=1; PsuMon_Build(f,&m);
+    CHECK(f[238]==1 && f[239]==0, "PWR_EN tat, safe_state OFF");
 }
 
 /* ---- anh cau hinh ---- */
