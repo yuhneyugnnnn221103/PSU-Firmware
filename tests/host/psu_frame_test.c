@@ -36,7 +36,9 @@ int main(void)
 #endif
     CHECK(Psu_FrameValid(f, sizeof f), "khung hop le");
     f[6] ^= 1; CHECK(!Psu_FrameValid(f, sizeof f), "doi 1 byte payload -> CRC sai"); f[6] ^= 1;
-    f[3] ^= 1; CHECK(!Psu_FrameValid(f, sizeof f), "doi CMD -> CRC sai (hoac CMD khong hop le)"); f[3] ^= 1;
+#if PSU_CRC_INCLUDE_CMD
+    f[3] ^= 1; CHECK(!Psu_FrameValid(f, sizeof f), "doi CMD -> CRC sai"); f[3] ^= 1;
+#endif   /* CRC tu ADDR: loi CMD khong bi CRC bat (chi bi chan boi bang do dai/CMD hop le) */
 
     /* 2. Do dai theo CMD khop tai lieu */
     CHECK(Psu_RxFrameLen(0x0101)==13 && Psu_RxFrameLen(0x0202)==13 && Psu_RxFrameLen(0x0303)==13, "13 byte");
