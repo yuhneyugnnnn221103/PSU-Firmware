@@ -10,6 +10,8 @@
 #include <ina228_driver.h>
 #include <led.h>
 #include <safety.h>
+#include <psu_trip.h>
+#include <string.h>
 #include <stddef.h>
 #include "main.h"
 
@@ -117,6 +119,24 @@ static uint16_t active_mask(void)
     return m;
 }
 
+/* Dua co tich luy cua INA thanh bit trip code (bang tam thoi - xem psu_trip.h).
+ * include_under: tinh ca co "duoi" (SHNTUL, BUSUL). Sau khi da cat nguon, dong/ap ve 0 co the tu
+ * sinh co duoi -> khi TRIPPED/LOCKOUT chi tin co "qua" (khong phai he qua cua viec cat nguon). */
+static void latch_hw_bits(const uint16_t chf[INA228_CH_COUNT], bool include_under)
+{
+    for (uint8_t c = 0; c < INA228_CH_COUNT; c++) {
+        const uint16_t f = chf[c];
+        const uint8_t  b = (uint8_t)(1u << c);
+        if (f & (INA228_FLAG_SHNTOL | INA228_FLAG_POL)) (void)PsuTrip_Set(PSU_TRIP_B_INA_OC, b);
+        if (f & INA228_FLAG_BUSOL)                      (void)PsuTrip_Set(PSU_TRIP_B_INA_V,  b);
+        if (f & INA228_FLAG_TMPOL)                      (void)PsuTrip_Set(PSU_TRIP_B_TEMP_FT, b);
+        if (include_under) {
+            if (f & INA228_FLAG_SHNTUL) (void)PsuTrip_Set(PSU_TRIP_B_INA_OC, (uint8_t)(b << 4));
+            if (f & INA228_FLAG_BUSUL)  (void)PsuTrip_Set(PSU_TRIP_B_INA_V,  (uint8_t)(b << 4));
+        }
+    }
+}
+
 /* Trip den tu duong nhanh (ISR) chua biet ma loi. Sau SAFE_SETTLE_MS thi vet
  * lai tu diag da duoc ina228_alert_process() cap nhat. Dung chung cho TRIPPED
  * va LOCKOUT: lan trip thu N vao LOCKOUT ngay, nhung van phai co ma loi. */
@@ -131,9 +151,12 @@ static void resolve_trip_code(uint32_t now, uint16_t any_fault, uint8_t fault_ch
         s.trip_mask = fault_ch;
     } else if (dcm_fault) {
         s.code = FCODE_DCM;
+    } else if ((PsuTrip_Bytes()[PSU_TRIP_B_SUP_MAX] | PsuTrip_Bytes()[PSU_TRIP_B_SUP_MIN]) != 0u) {
+        s.code = FCODE_THRESHOLD;
     } else {
         /* Chan ALERT da kich nhung I2C khong xac nhan duoc bit nao */
         s.code = FCODE_BUS;
+        (void)PsuTrip_Set(PSU_TRIP_B_MISC, PSU_TRIP_MISC_UNKNOWN);
     }
 }
 
@@ -152,6 +175,7 @@ void Safety_Init(void)
     s.t_state     = HAL_GetTick();
     s.t_trip      = s.t_state;
 
+    PsuTrip_Init();
     pwr_write(false);
 }
 
@@ -184,13 +208,24 @@ void Safety_Task(uint32_t now)
     uint8_t  cfgbad_ch = 0u;
     uint8_t  alive_ch  = 0u;
     uint16_t mact      = active_mask();
+    uint16_t chf[INA228_CH_COUNT];
+    psu_trip_in_t ti;
+
+    memset(chf, 0, sizeof(chf));
+    memset(&ti, 0, sizeof(ti));
 
     /* --- Gom trang thai 4 kenh --- */
     for (uint8_t i = 0; i < INA228_CH_COUNT; i++) {
         ina228_dev_t *d = ina228_get_dev(i);
         if (d == NULL) { stale_ch |= (uint8_t)(1u << i); continue; }
 
+        ti.cur24[i]  = d->raw.current_reg24;
+        ti.vbus24[i] = d->raw.vbus_reg24;
+        ti.stamp[i]  = d->meas.timestamp_ms;
+        ti.fresh[i]  = ina228_is_fresh(d, now);
+
         uint16_t f = (uint16_t)(d->diag_sticky & mact);
+        chf[i] = f;
         if (f != 0u) {
             any_fault |= f;
             fault_ch  |= (uint8_t)(1u << i);
@@ -216,6 +251,12 @@ void Safety_Task(uint32_t now)
     bool dcm_fault      = dcm_fault_raw &&
                           (s.state == SAFE_ON || s.state == SAFE_ARMING);
     bool bus_lost  = (alive_ch == 0u);
+
+    /* --- Trip code: so sanh nguong (chi khi SAFE_ON) + co phan cung --- */
+    const bool sw_trip = PsuTrip_Evaluate(s.state == SAFE_ON, &ti);
+    if (s.state == SAFE_ON)                                        latch_hw_bits(chf, true);
+    else if (s.state == SAFE_TRIPPED || s.state == SAFE_LOCKOUT)   latch_hw_bits(chf, false);
+    if (dcm_fault) (void)PsuTrip_Set(PSU_TRIP_B_TEMP_FT, (uint8_t)((Comm_DcmFault() & 0x0Fu) << 4));
 
     /* --- Duong nhanh tu ISR: chuyen trang thai o day, khong o ISR --- */
     if (s.fast_trip) {
@@ -297,7 +338,7 @@ void Safety_Task(uint32_t now)
             s.trip_count = 0u;
         }
 
-        if (any_fault != 0u || dcm_fault
+        if (any_fault != 0u || dcm_fault || sw_trip
 #if SAFE_TRIP_ON_BUS_LOSS
             || bus_lost
 #endif
@@ -306,7 +347,11 @@ void Safety_Task(uint32_t now)
             s.trip_mask = fault_ch;
             if (dcm_fault)      s.code = FCODE_DCM;
             else if (any_fault) s.code = classify(any_fault);
-            else                s.code = FCODE_BUS;
+            else if (sw_trip)   s.code = FCODE_THRESHOLD;
+            else {
+                s.code = FCODE_BUS;
+                (void)PsuTrip_Set(PSU_TRIP_B_MISC, PSU_TRIP_MISC_BUS);
+            }
             s.t_trip = now;
             if (s.trip_count < 255u) s.trip_count++;
             goto_state(SAFE_TRIPPED, now);
@@ -321,6 +366,7 @@ void Safety_Task(uint32_t now)
         /* Du so lan trip lien tiep -> khoa NGAY (khong doi co ma loi, de PC khong
          * lach duoc bang CLR_FAULT trong cua so phan loai). */
         if (s.trip_count >= SAFE_TRIP_LOCKOUT_N) {
+            (void)PsuTrip_Set(PSU_TRIP_B_MISC, PSU_TRIP_MISC_LOCKOUT);
             goto_state(SAFE_LOCKOUT, now);
         }
         break;
@@ -368,29 +414,47 @@ bool Safety_RequestPower(bool on)
 
 void Safety_ClearFault(void)
 {
-    s.pc_wants_on = false;               /* KHONG tu dong bat lai nguon */
-
-    /* LOCKOUT: chi thoat duoc bang reset phan cung (co y). Giu nguyen ma loi,
-     * trip_mask va co sticky de con chan doan. */
+    /* LOCKOUT: chi thoat duoc bang reset phan cung (co y). Giu nguyen ma loi, trip_mask,
+     * trip code va co sticky de con chan doan. */
     if (s.state == SAFE_LOCKOUT) return;
 
     /* Vua trip lan thu N nhung Task chua kip chuyen sang LOCKOUT (CLR_FAULT chen
      * vao giua 2 vong): khoa luon, khong cho ve OFF. */
     if (s.state == SAFE_TRIPPED && s.trip_count >= SAFE_TRIP_LOCKOUT_N) {
+        (void)PsuTrip_Set(PSU_TRIP_B_MISC, PSU_TRIP_MISC_LOCKOUT);
         goto_state(SAFE_LOCKOUT, HAL_GetTick());
         return;
     }
 
     sticky_clear_all();
+    PsuTrip_Clear();
 
     s.code        = FCODE_NONE;
     s.trip_mask   = 0u;
 
     if (s.state == SAFE_TRIPPED) {
-        /* KHONG xoa trip_count: chi reset sau SAFE_STABLE_MS chay on dinh o
-         * SAFE_ON, neu khong PC thu lai vo han vao mot su co that. */
+        /* Huy yeu cau bat (KHONG tu bat lai) va ve OFF. KHONG xoa trip_count: chi reset sau
+         * SAFE_STABLE_MS chay on dinh o SAFE_ON, neu khong PC thu lai vo han vao mot su co that. */
+        s.pc_wants_on = false;
         goto_state(SAFE_OFF, HAL_GetTick());
     }
+}
+
+void Safety_Control(uint8_t mask, bool clear)
+{
+    if (s.state == SAFE_LOCKOUT) return;                  /* chi reset phan cung */
+
+    if (clear) {
+        const bool was_tripped = (s.state == SAFE_TRIPPED);
+        Safety_ClearFault();
+        if (was_tripped) return;                          /* lenh bat trong cung khung bi bo qua */
+    }
+    (void)Safety_RequestPower((mask & 0x01u) != 0u);      /* PWR_EN = cum 1 = bit0 */
+}
+
+bool Safety_IsArmed(void)
+{
+    return s.state == SAFE_ON;
 }
 
 /* ==========================================================================

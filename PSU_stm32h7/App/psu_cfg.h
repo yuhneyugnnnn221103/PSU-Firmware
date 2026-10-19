@@ -15,9 +15,8 @@
 #define PSU_CFG_OFF_SUPPLY   840u
 #define PSU_CFG_OFF_SPARE    888u
 
-#define PSU_INA_REGS         9u
-enum { INAR_CONFIG = 0, INAR_ADC_CONFIG, INAR_SHUNT_CAL, INAR_SHUNT_TEMPCO,
-       INAR_SOVL, INAR_SUVL, INAR_BOVL, INAR_BUVL, INAR_TEMP_LIMIT };
+#include <ina228_cfg.h>          /* INAR_* : thu tu 9 thanh ghi */
+#define PSU_INA_REGS         INA228_NREGS
 
 /** Nap tu Flash (hoac mac dinh neu chua co) va ap nguong Supply. Goi sau CfgStore_Init(). */
 void PsuCfg_Load(void);

@@ -8,7 +8,6 @@
 #include <ina228_driver.h>
 #include <string.h>
 #include "main.h"
-#include <math.h>
 
 /* ==========================================================================
  * TRANG THAI NOI BO
@@ -104,15 +103,17 @@ static void ina_store(ina228_dev_t *dev, uint8_t reg, const uint8_t *b)
     switch (reg) {
     case INA228_REG_ADC_CONFIG:
     	dev->adc_cfg = (uint16_t)(((uint16_t)b[0] << 8) | b[1]);
-    	dev->cfg_ok = (dev->adc_cfg == INA228_ADC_CONFIG_VALUE);
+    	dev->cfg_ok = (dev->adc_cfg == dev->regs[INAR_ADC_CONFIG]);
     	break;
 
     case INA228_REG_VBUS:
+        dev->raw.vbus_reg24 = ina_parse_24_unsigned(b);
         dev->raw.vbus_raw = ina_parse_20_unsigned(b);
         dev->meas.v_bus   = (float)dev->raw.vbus_raw * INA228_VBUS_LSB;
         break;
 
     case INA228_REG_CURRENT:
+        dev->raw.current_reg24 = ina_parse_24_unsigned(b);
         dev->raw.current_raw = ina_parse_20_signed(b);
         dev->meas.current    = (float)dev->raw.current_raw * INA228_CURRENT_LSB;
         break;
@@ -186,6 +187,27 @@ ina228_status_t ina228_bus_init(I2C_HandleTypeDef *hi2c, ina228_dev_t *devs)
     return INA228_OK;
 }
 
+static void ina_fill_default_regs_if_unset(ina228_dev_t *dev)
+{
+    if (dev->regs[INAR_SHUNT_CAL] != 0u) return;       /* da co cau hinh hop le */
+
+    dev->regs[INAR_CONFIG]       = INA228_CONFIG_VALUE;
+    dev->regs[INAR_ADC_CONFIG]   = INA228_ADC_CONFIG_VALUE;
+    dev->regs[INAR_SHUNT_CAL]    = INA228_SHUNT_CAL_VALUE;
+    dev->regs[INAR_SHUNT_TEMPCO] = INA228_SHUNT_TEMPCO_VALUE;
+    dev->regs[INAR_SOVL]         = INA228_SOVL_DISABLED;
+    dev->regs[INAR_SUVL]         = INA228_SUVL_DISABLED;
+    dev->regs[INAR_BOVL]         = INA228_BOVL_DISABLED;
+    dev->regs[INAR_BUVL]         = INA228_BUVL_DISABLED;
+    dev->regs[INAR_TEMP_LIMIT]   = 0x7FFFu;
+}
+
+void ina228_set_regs(ina228_dev_t *dev, const uint16_t regs[INA228_NREGS])
+{
+    if (dev == NULL || regs == NULL) return;
+    memcpy(dev->regs, regs, sizeof(dev->regs));
+}
+
 ina228_status_t ina228_dev_init(ina228_dev_t *dev)
 {
     uint16_t id;
@@ -208,11 +230,20 @@ ina228_status_t ina228_dev_init(ina228_dev_t *dev)
 
     /* 3. Cau hinh. Thu tu quan trong: CONFIG (ADCRANGE) TRUOC SHUNT_CAL,
      *    vi he so 4 trong SHUNT_CAL phu thuoc ADCRANGE. */
+    ina_fill_default_regs_if_unset(dev);
+    const uint16_t *r = dev->regs;
+
     struct { uint8_t reg; uint16_t val; } cfg[] = {
-        { INA228_REG_CONFIG,       INA228_CONFIG_VALUE       },
-        { INA228_REG_SHUNT_CAL,    INA228_SHUNT_CAL_VALUE    },
-        { INA228_REG_SHUNT_TEMPCO, INA228_SHUNT_TEMPCO_VALUE },
-        { INA228_REG_ADC_CONFIG,   INA228_ADC_CONFIG_VALUE   },
+        { INA228_REG_CONFIG,       (uint16_t)(r[INAR_CONFIG] & ~(INA228_CONFIG_RESET | INA228_CONFIG_RSTACC)) },
+        { INA228_REG_SHUNT_CAL,    r[INAR_SHUNT_CAL]    },
+        { INA228_REG_SHUNT_TEMPCO, r[INAR_SHUNT_TEMPCO] },
+        { INA228_REG_ADC_CONFIG,   r[INAR_ADC_CONFIG]   },
+        { INA228_REG_SOVL,         r[INAR_SOVL]         },
+        { INA228_REG_BOVL,         r[INAR_BOVL]         },
+        { INA228_REG_TEMP_LIMIT,   r[INAR_TEMP_LIMIT]   },
+        /* Nguong DUOI chi nap khi armed (xem ina228_set_under_armed) */
+        { INA228_REG_SUVL,         dev->under_armed ? r[INAR_SUVL] : INA228_SUVL_DISABLED },
+        { INA228_REG_BUVL,         dev->under_armed ? r[INAR_BUVL] : INA228_BUVL_DISABLED },
 
         /* DIAG_ALRT sau cung: chi bat ALERT khi moi nguong da san sang */
         { INA228_REG_DIAG_ALRT,    INA228_DIAG_ALRT_VALUE    },
@@ -222,6 +253,7 @@ ina228_status_t ina228_dev_init(ina228_dev_t *dev)
         st = ina228_write_reg16(dev, cfg[i].reg, cfg[i].val);
         if (st != INA228_OK) return st;
     }
+    dev->under_applied = dev->under_armed;
 
     /* 4. Doc DIAG_ALRT de xoa co POR va kiem tra checksum trim memory */
     st = ina228_read_reg16(dev, INA228_REG_DIAG_ALRT, &dev->diag_alrt);
@@ -229,9 +261,6 @@ ina228_status_t ina228_dev_init(ina228_dev_t *dev)
     if ((dev->diag_alrt & INA228_FLAG_MEMSTAT) == 0u) {
         dev->diag_sticky |= INA228_FLAG_MEMSTAT;   /* IC co the sai so nang */
     }
-
-    // re-init ghi lại ngưỡng nếu PC đã nạp cấu hình limit
-    (void)ina228_write_limits(dev);
 
     dev->alert_pending = false;
     dev->cfg_ok        = true;
@@ -439,70 +468,33 @@ ina228_dev_t *ina228_get_dev(uint8_t idx)
 }
 
 /* ==========================================================================
- * LIMIT
+ * NGUONG DUOI (SUVL, BUVL) - chi nap khi armed
  * ========================================================================== */
-ina228_status_t ina228_write_limits(ina228_dev_t *dev)
+void ina228_set_under_armed(bool armed)
 {
-    if (!dev->limits.loaded) return INA228_OK;   /* PC chua cau hinh */
-
-    ina228_status_t st;
-    st = ina228_write_reg16(dev, INA228_REG_SOVL, dev->limits.sovl);
-    if (st != INA228_OK) return st;
-    st = ina228_write_reg16(dev, INA228_REG_BOVL, dev->limits.bovl);
-    if (st != INA228_OK) return st;
-    return ina228_write_reg16(dev, INA228_REG_BUVL, dev->limits.buvl);
+    if (!s_bus.inited) return;
+    for (uint8_t i = 0; i < INA228_CH_COUNT; i++) s_bus.devs[i].under_armed = armed;
 }
 
-/* Quy doi + clamp. Tra ve raw 16-bit da san sang ghi. */
-static uint16_t lim_sovl_raw(float a)
+ina228_status_t ina228_limits_sync(void)
 {
-    if (!isfinite(a) || a <= 0.0f) return INA228_SOVL_DISABLED;
+    if (!s_bus.inited)                  return INA228_ERR_PARAM;
+    if (s_bus.state == INA228_BUS_BUSY) return INA228_ERR_BUSY;
 
-    float counts = (a * INA228_R_SHUNT_OHM) / INA228_SOVL_LSB_V;
-    if (counts > 32767.0f) counts = 32767.0f;
-    return (uint16_t)(int16_t)(counts + 0.5f);
-}
+    ina228_status_t rc = INA228_OK;
+    for (uint8_t i = 0; i < INA228_CH_COUNT; i++) {
+        ina228_dev_t *d = &s_bus.devs[i];
+        if (!d->cfg_ok || d->under_applied == d->under_armed) continue;
 
-static uint16_t lim_busv_raw(float v, uint16_t disabled)
-{
-    if (!isfinite(v) || v <= 0.0f) return disabled;
+        const uint16_t suvl = d->under_armed ? d->regs[INAR_SUVL] : INA228_SUVL_DISABLED;
+        const uint16_t buvl = d->under_armed ? d->regs[INAR_BUVL] : INA228_BUVL_DISABLED;
 
-    float counts = v / INA228_BUSVL_LSB_V;
-    if (counts > 32767.0f) counts = 32767.0f;   /* bit15 Reserved, phai = 0 */
-    return (uint16_t)(counts + 0.5f) & 0x7FFFu;
-}
-
-ina228_status_t ina228_read_limits(ina228_dev_t *dev)
-{
-    ina228_status_t st;
-    if (dev == NULL) return INA228_ERR_PARAM;
-
-    st = ina228_read_reg16(dev, INA228_REG_SOVL, &dev->limits.sovl);
-    if (st != INA228_OK) return st;
-    st = ina228_read_reg16(dev, INA228_REG_BOVL, &dev->limits.bovl);
-    if (st != INA228_OK) return st;
-    return ina228_read_reg16(dev, INA228_REG_BUVL, &dev->limits.buvl);
-}
-
-ina228_status_t ina228_set_limits_f(ina228_dev_t *dev, float sovl_a, float bovl_v, float buvl_v)
-{
-    ina228_status_t st;
-
-    if (dev == NULL)                    return INA228_ERR_PARAM;
-    if (s_bus.state != INA228_BUS_IDLE) return INA228_ERR_BUSY;
-
-    dev->limits.sovl_a = sovl_a;
-    dev->limits.bovl_v = bovl_v;
-    dev->limits.buvl_v = buvl_v;
-
-    dev->limits.sovl = lim_sovl_raw(sovl_a);
-    dev->limits.suvl = INA228_SUVL_DISABLED;      /* bo qua theo yeu cau */
-    dev->limits.bovl = lim_busv_raw(bovl_v, INA228_BOVL_DISABLED);
-    dev->limits.buvl = lim_busv_raw(buvl_v, INA228_BUVL_DISABLED);
-    dev->limits.loaded = true;
-
-    st = ina228_write_limits(dev);
-    if (st != INA228_OK) return st;
-
-    return ina228_read_limits(dev);
+        if (ina228_write_reg16(d, INA228_REG_SUVL, suvl) == INA228_OK &&
+            ina228_write_reg16(d, INA228_REG_BUVL, buvl) == INA228_OK) {
+            d->under_applied = d->under_armed;
+        } else {
+            rc = INA228_ERR_I2C;
+        }
+    }
+    return rc;
 }

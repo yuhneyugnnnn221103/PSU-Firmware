@@ -91,7 +91,8 @@ typedef enum {
     FCODE_UNDERVOLT = 3,  /* BUSUL                 */
     FCODE_OVERTEMP  = 4,  /* TMPOL                 */
     FCODE_DCM       = 5,  /* chan FT_SECn tu DCM   */
-    FCODE_BUS       = 6   /* mat lien lac I2C      */
+    FCODE_BUS       = 6,  /* mat lien lac I2C      */
+    FCODE_THRESHOLD = 7   /* STM tu so sanh nguong (psu_trip) vuot MAX/MIN */
 } fault_code_t;
 
 /* ==========================================================================
@@ -113,14 +114,22 @@ void Safety_Task(uint32_t now_ms);
  *  @retval false neu dang TRIPPED/LOCKOUT va PC yeu cau BAT -> tu choi. */
 bool Safety_RequestPower(bool on);
 
-/** @brief Xu ly lenh 0x8B CLR_FAULT tu PC. Xoa latch, ve SAFE_OFF.
- *         KHONG tu dong bat lai nguon: PC phai gui them PWR_CTRL(on).
+/** @brief Clear trip: xoa trip code + co tich luy cua INA. Neu dang TRIPPED thi ve SAFE_OFF va huy yeu cau bat
+ *         (KHONG tu bat lai: PC phai gui lenh bat o khung sau). O trang thai khac KHONG doi bat/tat.
  *         KHONG reset bo dem trip (chi reset sau SAFE_STABLE_MS o SAFE_ON).
- *         O SAFE_LOCKOUT: bi bo qua (chi thoat bang reset phan cung). */
+ *         O SAFE_LOCKOUT: bi bo qua (chi thoat bang reset phan cung), trip code duoc giu. */
 void Safety_ClearFault(void);
 
 /** @brief Cat PWR_EN ngay, KHONG phu thuoc state/HAL. Dung trong fault handler. */
 void Safety_ForceOff(void);
+
+/** @brief Lenh dieu khien 01 01. Phan cung hien tai: 1 chan PWR_EN = cum 1 (bit0 cua mask); bit khac bo qua.
+ *         clear = ClearTrip: xoa trip code va thoat TRIPPED ve OFF; khi do lenh bat trong CUNG khung bi
+ *         bo qua (PC gui lenh bat o khung sau). Moi lenh khong clear ghi de trang thai bat/tat. */
+void Safety_Control(uint8_t mask, bool clear);
+
+/** @brief true khi dang SAFE_ON: duoc phep nap nguong duoi cua INA va so sanh nguong. */
+bool Safety_IsArmed(void);
 
 /* --- Truy van trang thai (dung cho khung STATUS 0x03 va LED) --- */
 safe_state_t Safety_State(void);

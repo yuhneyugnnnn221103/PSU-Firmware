@@ -14,7 +14,7 @@ APP = ../../PSU_stm32h7/App
 self_test_test: self_test_test.c $(APP)/self_test.c
 	$(CC) -std=gnu11 -O1 -Wall -Iinc_safety -I$(APP) -I../../PSU_stm32h7/BSP $^ -o $@
 
-safety_test: safety_test.c $(APP)/safety.c
+safety_test: safety_test.c $(APP)/safety.c $(APP)/psu_trip.c
 	$(CC) -std=gnu11 -O1 -Wall -Wno-unused-function -Iinc_safety -I$(APP) -I../../PSU_stm32h7/BSP $^ -o $@
 
 psu_frame_test: psu_frame_test.c $(SH)/psu_frame.c $(SH)/crc16_ccitt.c

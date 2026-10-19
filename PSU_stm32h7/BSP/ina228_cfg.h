@@ -144,6 +144,11 @@
                              INA228_FLAG_SHNTUL | INA228_FLAG_BUSOL  | \
                              INA228_FLAG_BUSUL  | INA228_FLAG_POL)
 
+/* Thu tu 9 thanh ghi cau hinh cua 1 INA trong ban tin cau hinh PSU va ina228_dev_t.regs[] */
+#define INA228_NREGS              9u
+enum { INAR_CONFIG = 0, INAR_ADC_CONFIG, INAR_SHUNT_CAL, INAR_SHUNT_TEMPCO,
+       INAR_SOVL, INAR_SUVL, INAR_BOVL, INAR_BUVL, INAR_TEMP_LIMIT };
+
 /* ==========================================================================
  * 5. HE SO QUY DOI NGUONG CANH BAO
  *   LSB cua thanh ghi ngUONG lon gap 16 lan LSB do luong 20-bit tuong ung
