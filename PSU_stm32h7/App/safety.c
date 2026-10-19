@@ -466,3 +466,4 @@ fault_code_t Safety_Code(void)     { return s.code;      }
 uint8_t      Safety_TripMask(void) { return s.trip_mask; }
 bool         Safety_PowerIsOn(void){ return s.pwr_on;    }
 uint8_t      Safety_TripCount(void){ return s.trip_count;}
+bool         Safety_PcWantsOn(void){ return s.pc_wants_on;}

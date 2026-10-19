@@ -8,6 +8,7 @@
 #include "main.h"
 #include "app_main.h"
 #include "cfg_store.h"
+#include "psu_cfg.h"
 #include "flash_guard.h"
 
 extern I2C_HandleTypeDef hi2c1;
@@ -36,21 +37,14 @@ static bool every(uint32_t *last, uint32_t now, uint32_t period)
 	return true;
 }
 
-static void apply_saved_limits(void)
+/* Nap 9 thanh ghi hieu luc (PsuCfg_InaRegs) vao driver cho ca 4 kenh; reinit = true thi khoi tao lai IC. */
+static void load_ina_regs(bool reinit)
 {
-	cfg_limits_payload_t lims;
-	if (!CfgStore_ReadLimits(&lims)) return;
-
-	for (uint8_t i = 0; i < INA228_CH_COUNT; i ++) {
-		ina228_dev_t *d = ina228_get_dev(i);
-		if (d == NULL) continue;
-        d->limits.sovl = lims.sovl[i];
-        d->limits.bovl = lims.bovl[i];
-        d->limits.buvl = lims.buvl[i];
-        d->limits.loaded = true;
-
-        (void)ina228_write_limits(d);
-        (void)ina228_read_limits(d);
+	for (uint8_t i = 0; i < INA228_CH_COUNT; i++) {
+		uint16_t r[INA228_NREGS];
+		PsuCfg_InaRegs(i, r);
+		ina228_set_regs(&g_devs[i], r);
+		if (reinit) (void)ina228_dev_init(&g_devs[i]);
 	}
 }
 
@@ -103,9 +97,11 @@ void App_Init(void)
 	FwUpdate_Init();
 	CfgStore_Init();
 
+	PsuCfg_Load();                       /* cau hinh PSU tu Flash (hoac mac dinh) + nguong Supply */
+	load_ina_regs(false);
+
 	ina228_bus_init(&hi2c1, g_devs);
 	ina228_init_all();
-	apply_saved_limits();
 
 	Comm_Init();
 
@@ -128,16 +124,28 @@ void App_Loop(void)
 		Comm_TxWatchdog(now);
 	}
 
-	if (every(&g_app.t_scan, now, INA228_SCAN_PERIOD_MS)) {
-		Comm_OnTick();
+	/* Quet 4 INA bang I2C DMA. Firmware KHONG tu phat telemetry: PC hoi (02 02) thi tra loi tu du lieu moi nhat. */
+	if (every(&g_app.t_scan, now, INA228_SCAN_PERIOD_MS) && !FwUpdate_IsBusy()) {
+		(void)ina228_bus_start();
 	}
 
 	Comm_RxPoll();
-	Comm_Poll(now);
+
+	if (ina228_bus_state() == INA228_BUS_DONE) {
+		ina228_bus_collect(NULL);
+	}
 
 	if (ina228_bus_state() == INA228_BUS_IDLE) {
 		ina228_alert_process();
-		Comm_CfgTask();
+
+		/* Cau hinh moi (04 04, chi nhan khi SAFE_OFF): nap lai thanh ghi cho INA */
+		if (PsuCfg_ConsumeDirty()) {
+			load_ina_regs(true);
+		}
+
+		/* Nguong DUOI cua INA (SUVL, BUVL) chi bat khi SAFE_ON */
+		ina228_set_under_armed(Safety_IsArmed());
+		(void)ina228_limits_sync();
 
 		if (every(&g_app.t_cfg_verify, now, CFG_VERIFY_MS)) {
 			reinit_stale_dev(now);
@@ -146,7 +154,6 @@ void App_Loop(void)
 
 	Safety_Task(now);
 	FwUpdate_Task(now);
-	Comm_StatusTask(now);
 	Comm_FwPoll();
 	Led_Task(now);
 	self_confirmed_task(now);

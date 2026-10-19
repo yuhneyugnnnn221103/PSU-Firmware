@@ -90,7 +90,10 @@ ghi không cần xoá (`CfgStore_NeedsErase()`); ngược lại hoãn tới khi 
   tối đa `OTA_MAX_BOOT_ATTEMPTS` = 3. Muốn nới lỏng: tăng hằng số này.
 - **Ghi bộ đếm lỗi** (`Ota_CommitTrial`): nếu không ghi được và slot kia đã confirm + khởi động được → boot slot kia;
   nếu không thì vẫn boot slot đã chọn.
-- **`FW_INFO`** trả thêm byte 11: bit7 = đã confirm, bit6..0 = `boot_count` (127 = bị rollback).
-- **`FW_ROLLBACK`** nay có ACK (status: OK / REFUSED / BUSY / WRONG_SLOT / `NO_TARGET`=10 / PROG_FAIL), và chỉ
+- **`FW_INFO`** trả thêm byte trạng thái trial (offset 12 trong khung 17 byte, xem PSU_PROTOCOL.md): bit7 = đã confirm, bit6..0 = `boot_count` (127 = bị rollback).
+- **`FW_ROLLBACK` (`97 97`)** nay có ACK (status: OK / REFUSED / BUSY / WRONG_SLOT / `NO_TARGET`=10 / PROG_FAIL), và chỉ
   rollback khi slot kia thật sự khởi động được (`Ota_SlotBootable`).
 - Lỗi ghi flash trong OTA trả `PROG_FAIL` (9), `info` = mã lỗi HAL; `CRC_FAIL` dành cho sai CRC.
+
+> Lưu ý: từ khi chuyển sang khung PSU (CMD 2 byte, bước `ERASE` riêng `96 96`), toàn bộ mô tả khung/ACK nằm ở
+> `docs/PSU_PROTOCOL.md`. Các đoạn trên nói về lệnh cũ (CMD 1 byte, `BEGIN` tự xoá) chỉ còn giá trị lịch sử.

@@ -1,4 +1,8 @@
-# PSU-Firmware – luồng hoạt động hiện tại (bản chụp trước khi cải cách)
+# PSU-Firmware – luồng hoạt động (bản chụp TRƯỚC khi chuyển sang giao thức PSU/APSU)
+
+> **Đã lỗi thời ở phần truyền thông.** Sau đợt cải cách giao thức: firmware không tự phát telemetry, chỉ trả lời `02 02`/`03 03`;
+> khung CMD 2 byte; cấu hình 915 B lưu Flash; STM tự so ngưỡng + trip code; nạp code có bước `ERASE` riêng.
+> Xem `docs/PSU_PROTOCOL.md`. Các phần bootloader, safety, OTA cơ chế slot vẫn đúng.
 
 Tài liệu mô tả đúng những gì code đang làm (nhánh `claude/stoic-maxwell-314gkk`, sau commit "OTA nhóm D").
 Chưa có gì trong tài liệu này được kiểm chứng trên phần cứng; những chỗ "chưa đo" được ghi rõ.

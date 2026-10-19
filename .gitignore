@@ -45,3 +45,11 @@ UI/
 
 *.user
 *.exe
+# Test host (binary build ra)
+tests/host/cfg_store_test
+tests/host/recovery_test
+tests/host/select_test
+tests/host/safety_test
+tests/host/self_test_test
+tests/host/psu_frame_test
+tests/host/psu_logic_test

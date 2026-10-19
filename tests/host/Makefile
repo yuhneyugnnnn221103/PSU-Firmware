@@ -12,10 +12,10 @@ select_test: select_test.c $(COMMON) $(SH)/cfg_store.c $(SH)/ota_select.c
 
 APP = ../../PSU_stm32h7/App
 self_test_test: self_test_test.c $(APP)/self_test.c
-	$(CC) -std=gnu11 -O1 -Wall -Iinc_safety -I$(APP) -I../../PSU_stm32h7/BSP $^ -o $@
+	$(CC) -std=gnu11 -O1 -Wall -Iinc_safety -I$(APP) -I../../PSU_stm32h7/BSP -I../../shared_lib $^ -o $@
 
 safety_test: safety_test.c $(APP)/safety.c $(APP)/psu_trip.c
-	$(CC) -std=gnu11 -O1 -Wall -Wno-unused-function -Iinc_safety -I$(APP) -I../../PSU_stm32h7/BSP $^ -o $@
+	$(CC) -std=gnu11 -O1 -Wall -Wno-unused-function -Iinc_safety -I$(APP) -I../../PSU_stm32h7/BSP -I../../shared_lib $^ -o $@
 
 psu_frame_test: psu_frame_test.c $(SH)/psu_frame.c $(SH)/crc16_ccitt.c
 	$(CC) $(CFLAGS) $^ -o $@

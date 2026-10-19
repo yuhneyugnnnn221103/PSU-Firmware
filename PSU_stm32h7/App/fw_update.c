@@ -1,4 +1,3 @@
-#include <comm.h>
 #include <fw_update.h>
 #include <safety.h>
 #include <string.h>
@@ -10,35 +9,12 @@
 #include "ota_proto.h"
 #include "ota_select.h"
 
-/* Khung FW_* phai khop voi bootloader recovery (shared_lib/ota_proto.h) */
-_Static_assert(TLM_HDR1 == OTAP_HDR1 && TLM_HDR2 == OTAP_HDR2 &&
-               TLM_TAIL1 == OTAP_TAIL1 && TLM_TAIL2 == OTAP_TAIL2 &&
-               TLM_BOARD_ADDR == OTAP_BOARD_ADDR, "khung FW_*: header/tail/addr lech");
-_Static_assert(TLM_CMD_FW_BEGIN == OTAP_CMD_FW_BEGIN && TLM_CMD_FW_DATA == OTAP_CMD_FW_DATA &&
-               TLM_CMD_FW_END == OTAP_CMD_FW_END && TLM_CMD_FW_COMMIT == OTAP_CMD_FW_COMMIT &&
-               TLM_CMD_FW_ACK == OTAP_CMD_FW_ACK && TLM_CMD_FW_INFO == OTAP_CMD_FW_INFO, "khung FW_*: cmd lech");
-_Static_assert(TLM_FW_CHUNK_MAX == OTAP_CHUNK_MAX && TLM_FW_BEGIN_SZ == OTAP_BEGIN_SZ &&
-               TLM_FW_DATA_FRAME_MAX == OTAP_DATA_FRAME_SZ && TLM_FW_CTRL_SZ == OTAP_CTRL_SZ &&
-               TLM_FW_ACK_SZ == OTAP_ACK_SZ, "khung FW_*: kich thuoc lech");
-_Static_assert(TLM_FW_BEGIN_OFF_SIZE == OTAP_BEGIN_OFF_SIZE && TLM_FW_BEGIN_OFF_CRC32 == OTAP_BEGIN_OFF_CRC32 &&
-               TLM_FW_BEGIN_OFF_VERSION == OTAP_BEGIN_OFF_VERSION && TLM_FW_DATA_OFF_SEQ == OTAP_DATA_OFF_SEQ &&
-               TLM_FW_DATA_OFF_LEN == OTAP_DATA_OFF_LEN && TLM_FW_DATA_OFF_PAYLOAD == OTAP_DATA_OFF_PAYLOAD &&
-               TLM_FW_ACK_OFF_CMD == OTAP_ACK_OFF_CMD && TLM_FW_ACK_OFF_STATUS == OTAP_ACK_OFF_STATUS &&
-               TLM_FW_ACK_OFF_INFO == OTAP_ACK_OFF_INFO && TLM_FW_ACK_OFF_SLOT == OTAP_ACK_OFF_SLOT, "khung FW_*: offset lech");
-_Static_assert(TLM_FW_ACK_OK == OTAP_ST_OK && TLM_FW_ACK_REFUSED == OTAP_ST_REFUSED &&
-               TLM_FW_ACK_BAD_SIZE == OTAP_ST_BAD_SIZE && TLM_FW_ACK_BAD_SEQ == OTAP_ST_BAD_SEQ &&
-               TLM_FW_ACK_CRC_FAIL == OTAP_ST_CRC_FAIL && TLM_FW_ACK_BUSY == OTAP_ST_BUSY &&
-               TLM_FW_ACK_NO_COMMIT_PENDING == OTAP_ST_NO_COMMIT && TLM_FW_ACK_ERASE_FAIL == OTAP_ST_ERASE_FAIL &&
-               TLM_FW_ACK_WRONG_SLOT == OTAP_ST_WRONG_SLOT && TLM_FW_ACK_PROG_FAIL == OTAP_ST_PROG_FAIL &&
-               TLM_FW_ACK_NO_TARGET == OTAP_ST_NO_TARGET, "khung FW_*: ma trang thai lech");
-_Static_assert(TLM_CMD_FW_ROLLBACK == OTAP_CMD_FW_ROLLBACK && TLM_FW_ACK_OFF_STATE == OTAP_ACK_OFF_STATE,
-               "khung FW_*: ROLLBACK/state lech");
-
 extern uint32_t g_pfnVectors;
 
 #define FWU_COMMIT_DELAY_MS   50u
 
 #define FWU_RECEIVE_TIMEOUT_MS    5000u   /* qua han khong co FW_DATA moi */
+#define FWU_ERASED_TIMEOUT_MS    60000u   /* da xoa xong nhung khong co FW_BEGIN */
 #define FWU_VERIFIED_TIMEOUT_MS  15000u   /* qua han khong nhan FW_COMMIT */
 
 /* ==========================================================================
@@ -61,6 +37,7 @@ static struct {
     bool     commit_pending;
     uint32_t commit_at_ms;
 
+    bool     erase_done;        /* vua xoa xong, chua bao ve PC */
     bool     erase_failed;      /* co loi xoa chua duoc bao cao ve PC */
     uint32_t erase_err_code;    /* HAL_FLASH_GetError() luc that bai   */
 
@@ -106,6 +83,13 @@ uint32_t FwUpdate_RunningVersion(void)
 	return h->version;
 }
 
+bool FwUpdate_TakeEraseDone(void)
+{
+    if (!s.erase_done) return false;
+    s.erase_done = false;
+    return true;
+}
+
 bool FwUpdate_TakeEraseError(uint32_t *out_err)
 {
     if (!s.erase_failed) return false;
@@ -115,29 +99,58 @@ bool FwUpdate_TakeEraseError(uint32_t *out_err)
     return true;
 }
 
-uint8_t FwUpdate_Begin(uint32_t total_size, uint32_t crc32_total,
-                       uint32_t version, uint32_t *out_info)
+/* ERASE: chi kiem tra dieu kien roi bat dau xoa; FwUpdate_Task() xoa dan tung sector, xong -> FWU_ERASED
+ * (Comm_FwPoll gui ACK khi xoa xong hoac khi loi). */
+uint8_t FwUpdate_Erase(uint32_t *out_info)
 {
+    if (out_info) *out_info = 0u;
+
     if (my_slot() == OTA_SLOT_NONE) {     /* link sai dia chi -> KHONG xoa gi */
         if (out_info) *out_info = SCB->VTOR;
-        return TLM_FW_ACK_WRONG_SLOT;
+        return OTAP_ST_WRONG_SLOT;
     }
 
     if (Safety_State() != SAFE_OFF) {
-        return TLM_FW_ACK_REFUSED;
+        return OTAP_ST_REFUSED;
     }
 
     if ((uint32_t)&g_pfnVectors != Ota_CodeBase(my_slot())) {
         if (out_info) *out_info = (uint32_t)&g_pfnVectors;
-        return TLM_FW_ACK_WRONG_SLOT;
+        return OTAP_ST_WRONG_SLOT;
     }
 
-    if (s.state != FWU_IDLE) {
-        return TLM_FW_ACK_BUSY;
+    if (s.state == FWU_ERASING) {
+        return OTAP_ST_BUSY;
+    }
+
+    s.erase_idx   = 0u;
+    s.erase_total = (uint8_t)OTA_SLOT_SECTORS;
+    s.erase_failed   = false;   /* vut loi ton dong tu phien truoc */
+    s.erase_err_code = 0u;
+    s.erase_done     = false;
+
+    s.state = FWU_ERASING;      /* ke ca khi dang RECEIVING/VERIFIED/ERASED: ERASE lai = bat dau lai */
+    s.last_activity_ms = HAL_GetTick();
+    return OTAP_ST_OK;
+}
+
+uint8_t FwUpdate_Begin(uint32_t total_size, uint32_t crc32_total,
+                       uint32_t version, uint32_t *out_info)
+{
+    if (out_info) *out_info = 0u;
+
+    if (Safety_State() != SAFE_OFF) {
+        return OTAP_ST_REFUSED;
+    }
+    if (s.state == FWU_IDLE) {
+        return OTAP_ST_NOT_ERASED;
+    }
+    if (s.state != FWU_ERASED) {
+        return OTAP_ST_BUSY;     /* dang xoa, hoac da BEGIN roi */
     }
     if (total_size == 0u || total_size > OTA_IMG_MAX_SIZE) {
         if (out_info) *out_info = OTA_IMG_MAX_SIZE;
-        return TLM_FW_ACK_BAD_SIZE;
+        return OTAP_ST_BAD_SIZE;
     }
 
     s.declared_size  = total_size;
@@ -147,16 +160,10 @@ uint8_t FwUpdate_Begin(uint32_t total_size, uint32_t crc32_total,
     s.bytes_received = 0u;
     s.last_seq       = -1;
 
-    s.erase_idx   = 0u;
-    s.erase_total = (uint8_t)OTA_SLOT_SECTORS;
-    s.erase_failed   = false;   /* vut loi ton dong tu phien truoc */
-    s.erase_err_code = 0u;
-
-    s.state = FWU_ERASING;   /* FwUpdate_Task() se xoa dan tung sector */
-
+    s.state = FWU_RECEIVING;
     s.last_activity_ms = HAL_GetTick();
 
-    return TLM_FW_ACK_OK;
+    return OTAP_ST_OK;
 }
 
 uint8_t FwUpdate_Data(uint16_t seq, uint16_t chunk_len,
@@ -165,27 +172,27 @@ uint8_t FwUpdate_Data(uint16_t seq, uint16_t chunk_len,
     if (out_info) *out_info = 0u;
 
     if (s.state != FWU_RECEIVING) {
-        return TLM_FW_ACK_BUSY;    /* van dang xoa, hoac chua FW_BEGIN */
+        return OTAP_ST_BUSY;    /* van dang xoa, hoac chua FW_BEGIN */
     }
     if ((int32_t)seq != s.last_seq + 1) {
         /* Sai thu tu - bao PC seq dung tiep theo can gui la last_seq+1 */
         if (out_info) *out_info = (uint32_t)(s.last_seq < 0 ? 0 : (uint32_t)s.last_seq);
-        return TLM_FW_ACK_BAD_SEQ;
+        return OTAP_ST_BAD_SEQ;
     }
 
-    const uint32_t off = (uint32_t)seq * TLM_FW_CHUNK_MAX;
+    const uint32_t off = (uint32_t)seq * OTAP_CHUNK_MAX;
 
-    if (chunk_len == 0u || chunk_len > TLM_FW_CHUNK_MAX || (off + chunk_len) > s.declared_size) {
-    	return TLM_FW_ACK_BAD_SIZE;
+    if (chunk_len == 0u || chunk_len > OTAP_CHUNK_MAX || (off + chunk_len) > s.declared_size) {
+    	return OTAP_ST_BAD_SIZE;
     }
 
-    if ((chunk_len < TLM_FW_CHUNK_MAX) && (off + chunk_len) != s.declared_size) {
-    	return TLM_FW_ACK_BAD_SIZE;
+    if ((chunk_len < OTAP_CHUNK_MAX) && (off + chunk_len) != s.declared_size) {
+    	return OTAP_ST_BAD_SIZE;
     }
 
 	if (seq == 0u) {
 		if (chunk_len < 8u) {
-			return TLM_FW_ACK_WRONG_SLOT;   /* chunk dau qua ngan, khong doc noi vector */
+			return OTAP_ST_WRONG_SLOT;   /* chunk dau qua ngan, khong doc noi vector */
 		}
 		const uint32_t reset_handler =
 			((uint32_t)data[4])        | ((uint32_t)data[5] << 8) |
@@ -196,25 +203,25 @@ uint8_t FwUpdate_Data(uint16_t seq, uint16_t chunk_len,
 
 		if (reset_handler < lo || reset_handler >= hi) {
 			if (out_info) *out_info = reset_handler;   /* PC hien de chan doan */
-			s.state = FWU_IDLE;   /* huy phien luon, khong nhan tiep */
-			return TLM_FW_ACK_WRONG_SLOT;
+			s.state = FWU_ERASED; /* chua ghi gi -> slot van sach, PC co the BEGIN lai khong can xoa lai */
+			return OTAP_ST_WRONG_SLOT;
 		}
 	}
 
 	const uint32_t write_addr = target_base() + OTA_HEADER_SIZE + off;
-	if ((write_addr + TLM_FW_CHUNK_MAX) > (target_base() + OTA_SLOT_SIZE))
-		return TLM_FW_ACK_BAD_SIZE;
+	if ((write_addr + OTAP_CHUNK_MAX) > (target_base() + OTA_SLOT_SIZE))
+		return OTAP_ST_BAD_SIZE;
 
-	static uint8_t chunk_buf[TLM_FW_CHUNK_MAX] __attribute__((aligned(32)));
+	static uint8_t chunk_buf[OTAP_CHUNK_MAX] __attribute__((aligned(32)));
 	memcpy(chunk_buf, data, chunk_len);
-	memset(chunk_buf + chunk_len, 0xFF, TLM_FW_CHUNK_MAX - chunk_len);
+	memset(chunk_buf + chunk_len, 0xFF, OTAP_CHUNK_MAX - chunk_len);
 
-	flash_op_result_t r = Flash_ProgramWords(write_addr, chunk_buf, TLM_FW_CHUNK_MAX);
+	flash_op_result_t r = Flash_ProgramWords(write_addr, chunk_buf, OTAP_CHUNK_MAX);
 
     if (!r.ok) {
         s.state = FWU_IDLE;
         if (out_info) *out_info = r.hal_error;
-        return TLM_FW_ACK_PROG_FAIL;
+        return OTAP_ST_PROG_FAIL;
     }
 
     /* CRC32 CHI phu chunk_len byte THAT (bo qua phan dem neu la chunk cuoi) */
@@ -226,7 +233,7 @@ uint8_t FwUpdate_Data(uint16_t seq, uint16_t chunk_len,
 
     s.last_activity_ms = HAL_GetTick();
 
-    return TLM_FW_ACK_OK;
+    return OTAP_ST_OK;
 }
 
 static uint32_t hdr_max_install_seq(void)
@@ -246,7 +253,7 @@ uint8_t FwUpdate_End(uint32_t *out_info)
     if (out_info) *out_info = 0u;
 
     if (s.state != FWU_RECEIVING) {
-        return TLM_FW_ACK_BUSY;
+        return OTAP_ST_BUSY;
     }
 
     const uint32_t final_crc = Crc32_Finalize(s.running_crc32);
@@ -254,7 +261,7 @@ uint8_t FwUpdate_End(uint32_t *out_info)
     if (s.bytes_received != s.declared_size || final_crc != s.declared_crc32) {
         s.state = FWU_IDLE;
         if (out_info) *out_info = final_crc;
-        return TLM_FW_ACK_CRC_FAIL;
+        return OTAP_ST_CRC_FAIL;
     }
 
     ota_image_header_t hdr;
@@ -266,7 +273,7 @@ uint8_t FwUpdate_End(uint32_t *out_info)
     uint32_t seq = CfgStore_AllocInstallSeq();
     if (seq == 0u) {
     	s.state = FWU_IDLE;
-    	return TLM_FW_ACK_REFUSED;
+    	return OTAP_ST_REFUSED;
     }
 
     const uint32_t m = hdr_max_install_seq();
@@ -280,13 +287,13 @@ uint8_t FwUpdate_End(uint32_t *out_info)
     if (!r.ok) {
         s.state = FWU_IDLE;
         if (out_info) *out_info = r.hal_error;
-        return TLM_FW_ACK_PROG_FAIL;
+        return OTAP_ST_PROG_FAIL;
     }
 
 	if (!Ota_ImageValid(target_slot())) {
 		s.state = FWU_IDLE;
 		if (out_info) *out_info = Crc32_Compute((const uint8_t *)Ota_CodeBase(target_slot()), s.declared_size);
-		return TLM_FW_ACK_CRC_FAIL;
+		return OTAP_ST_CRC_FAIL;
 	}
 
     /* Reset trang thai trial cua slot dich. Neu khong ghi duoc, ban ghi cu
@@ -294,7 +301,7 @@ uint8_t FwUpdate_End(uint32_t *out_info)
      * duoc bao OK. */
     if (!CfgStore_WriteBoot(target_slot(), 0u, 0u)) {
         s.state = FWU_IDLE;
-        return TLM_FW_ACK_REFUSED;
+        return OTAP_ST_REFUSED;
     }
 
     s.state = FWU_VERIFIED;
@@ -303,7 +310,7 @@ uint8_t FwUpdate_End(uint32_t *out_info)
 
     s.last_activity_ms = HAL_GetTick();
 
-    return TLM_FW_ACK_OK;
+    return OTAP_ST_OK;
 }
 
 bool FwUpdate_CanCommit(void)
@@ -326,9 +333,9 @@ void FwUpdate_Task(uint32_t now_ms)
         return;
     }
 
-    if (s.state == FWU_RECEIVING || s.state == FWU_VERIFIED) {
-        uint32_t limit = (s.state == FWU_RECEIVING)
-                        ? FWU_RECEIVE_TIMEOUT_MS : FWU_VERIFIED_TIMEOUT_MS;
+    if (s.state == FWU_ERASED || s.state == FWU_RECEIVING || s.state == FWU_VERIFIED) {
+        uint32_t limit = (s.state == FWU_ERASED) ? FWU_ERASED_TIMEOUT_MS
+                       : (s.state == FWU_RECEIVING) ? FWU_RECEIVE_TIMEOUT_MS : FWU_VERIFIED_TIMEOUT_MS;
         if ((uint32_t)(now_ms - s.last_activity_ms) >= limit) {
             s.state     = FWU_IDLE;
             s.timed_out = true;   /* Comm_FwPoll() se bao ve PC */
@@ -338,7 +345,9 @@ void FwUpdate_Task(uint32_t now_ms)
     if (s.state != FWU_ERASING) return;
 
     if (s.erase_idx >= s.erase_total) {
-        s.state = FWU_RECEIVING;
+        s.state = FWU_ERASED;
+        s.erase_done = true;                 /* Comm_FwPoll() gui ACK */
+        s.last_activity_ms = now_ms;
         return;
     }
 
@@ -364,19 +373,19 @@ bool FwUpdate_TakeTimeout(void)
 
 uint8_t FwUpdate_RequestRollBack(void)
 {
-	if (Safety_State() != SAFE_OFF)	return TLM_FW_ACK_REFUSED;
-	if (s.state != FWU_IDLE)		return TLM_FW_ACK_BUSY;
-	if (my_slot() == OTA_SLOT_NONE)	return TLM_FW_ACK_WRONG_SLOT;
+	if (Safety_State() != SAFE_OFF)	return OTAP_ST_REFUSED;
+	if (s.state != FWU_IDLE)		return OTAP_ST_BUSY;
+	if (my_slot() == OTA_SLOT_NONE)	return OTAP_ST_WRONG_SLOT;
 
 	/* Chi rollback khi slot kia thuc su khoi dong duoc; neu khong bootloader se
 	 * khong con slot nao va vao recovery. */
-	if (!Ota_SlotBootable(target_slot())) return TLM_FW_ACK_NO_TARGET;
+	if (!Ota_SlotBootable(target_slot())) return OTAP_ST_NO_TARGET;
 
-	if (!CfgStore_WriteBoot(my_slot(), CFG_BOOT_COUNT_FORCE_FAIL, 0u))	return TLM_FW_ACK_PROG_FAIL;
+	if (!CfgStore_WriteBoot(my_slot(), CFG_BOOT_COUNT_FORCE_FAIL, 0u))	return OTAP_ST_PROG_FAIL;
 
 	s.commit_pending = true;
 	s.commit_at_ms = HAL_GetTick() + FWU_COMMIT_DELAY_MS;
-	return TLM_FW_ACK_OK;
+	return OTAP_ST_OK;
 }
 
 uint8_t FwUpdate_RunningState(void)

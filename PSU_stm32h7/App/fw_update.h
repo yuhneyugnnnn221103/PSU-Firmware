@@ -7,6 +7,7 @@
 typedef enum {
     FWU_IDLE = 0,       /* khong co phien OTA nao dang chay        */
     FWU_ERASING,        /* dang xoa sector, chia nho qua nhieu tick */
+    FWU_ERASED,         /* da xoa xong, cho FW_BEGIN                */
     FWU_RECEIVING,      /* dang nhan FW_DATA                        */
     FWU_VERIFIED        /* FW_END da xac nhan CRC dung, cho COMMIT  */
 } fwu_state_t;
@@ -18,9 +19,17 @@ void FwUpdate_Init(void);
 void FwUpdate_Task(uint32_t now_ms);
 
 /* --- Xu ly tung lenh, goi tu rx_exec() trong comm.c ---
- * Tra ve ma trang thai TLM_FW_ACK_* (dinh nghia trong comm.h) de comm.c
+ * Tra ve ma trang thai OTAP_ST_* (shared_lib/ota_proto.h) de comm.c
  * dong khung FW_ACK gui lai PC. out_info duoc dien tuy lenh (vd last_seq
- * cho FW_DATA) - xem comm.h TLM_FW_ACK_OFF_INFO. */
+ * cho FW_DATA) - xem ota_proto.h. */
+/** Buoc 1 (sau INFO): bat dau xoa slot dich. Tra ve OTAP_ST_OK neu da bat dau (ACK gui SAU khi xoa xong,
+ *  xem FwUpdate_TakeEraseDone / TakeEraseError); ma khac -> tra loi ngay. */
+uint8_t FwUpdate_Erase(uint32_t *out_info);
+
+/** Vua xoa xong chua bao? Lay va xoa co. */
+bool FwUpdate_TakeEraseDone(void);
+
+/** Buoc 2: khai bao size/crc/version. Chi hop le sau khi xoa xong (NOT_ERASED neu chua ERASE). */
 uint8_t FwUpdate_Begin(uint32_t total_size, uint32_t crc32_total,
                        uint32_t version, uint32_t *out_info);
 uint8_t FwUpdate_Data(uint16_t seq, uint16_t chunk_len,
@@ -77,7 +86,7 @@ bool FwUpdate_TakeTimeout(void);
 uint32_t FwUpdate_RunningVersion(void);
 
 /** Danh dau slot dang chay la hong va reset de bootloader chon slot kia.
- *  @return TLM_FW_ACK_OK (se reset ~50 ms sau) | REFUSED (khong o SAFE_OFF) |
+ *  @return OTAP_ST_OK (se reset ~50 ms sau) | REFUSED (khong o SAFE_OFF) |
  *          BUSY (dang OTA) | WRONG_SLOT (khong biet dang chay slot nao) |
  *          NO_TARGET (slot kia khong the khoi dong) | PROG_FAIL (khong ghi duoc cfg) */
 uint8_t FwUpdate_RequestRollBack(void);
