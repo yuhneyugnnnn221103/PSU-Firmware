@@ -1,60 +1,49 @@
 #ifndef OTA_PROTO_H_
 #define OTA_PROTO_H_
 
-/* Khung FW_* dung chung giua App (comm.h) va Bootloader recovery.
- * Bo cuc: AB CD | CMD | ADDR | payload | CRC16 (BE) | E1 E2
- * CRC16-CCITT phu tu byte 2 den ngay truoc CRC. Gia tri PHAI khop comm.h
- * (fw_update.c co _Static_assert kiem tra). */
+#include "psu_frame.h"
 
-#define OTAP_HDR1             0xABu
-#define OTAP_HDR2             0xCDu
-#define OTAP_TAIL1            0xE1u
-#define OTAP_TAIL2            0xE2u
-#define OTAP_BOARD_ADDR       0x01u
+/* Phan OTA dung chung giua App va Bootloader recovery. Khung (CMD, do dai, CRC)
+ * dinh nghia o psu_frame.h. Vi tri byte duoi day tinh tu 0 (AB = byte 0).
+ *
+ *  BEGIN (21): [5..8] size  [9..12] crc32  [13..16] version
+ *  DATA (269): [5..6] seq   [7..8] len     [9..264] data (256 B, chunk cuoi dem 0xFF)
+ *  END/COMMIT/INFO/ERASE/ROLLBACK (9): chi co ADDR
+ *  ACK  (17) : [5] AckCmd (1 byte)  [6] status  [7..10] info  [11] slot  [12] state */
 
-#define OTAP_CMD_FW_BEGIN     0x90u
-#define OTAP_CMD_FW_DATA      0x91u
-#define OTAP_CMD_FW_END       0x92u
-#define OTAP_CMD_FW_COMMIT    0x93u
-#define OTAP_CMD_FW_ACK       0x94u
-#define OTAP_CMD_FW_INFO      0x95u
-#define OTAP_CMD_FW_ROLLBACK  0x96u
+#define OTAP_CHUNK_MAX          256u
 
-#define OTAP_CHUNK_MAX        256u
-#define OTAP_BEGIN_SZ         20u
-#define OTAP_DATA_FRAME_SZ    268u   /* co dinh: chunk cuoi phai duoc PC dem */
-#define OTAP_CTRL_SZ          8u
-#define OTAP_ACK_SZ           16u
-#define OTAP_RX_MAX           OTAP_DATA_FRAME_SZ
+#define OTAP_BEGIN_OFF_SIZE     5u
+#define OTAP_BEGIN_OFF_CRC32    9u
+#define OTAP_BEGIN_OFF_VERSION  13u
+#define OTAP_DATA_OFF_SEQ       5u
+#define OTAP_DATA_OFF_LEN       7u
+#define OTAP_DATA_OFF_PAYLOAD   9u
 
-#define OTAP_BEGIN_OFF_SIZE     4u
-#define OTAP_BEGIN_OFF_CRC32    8u
-#define OTAP_BEGIN_OFF_VERSION  12u
-#define OTAP_DATA_OFF_SEQ       4u
-#define OTAP_DATA_OFF_LEN       6u
-#define OTAP_DATA_OFF_PAYLOAD   8u
+#define OTAP_ACK_OFF_CMD        5u
+#define OTAP_ACK_OFF_STATUS     6u
+#define OTAP_ACK_OFF_INFO       7u
+#define OTAP_ACK_OFF_SLOT       11u   /* 'A' / 'B' (app) hoac 'R' (recovery) */
+#define OTAP_ACK_OFF_STATE      12u   /* CHI tra loi INFO: bit7 = da confirm, bit6..0 = boot_count (127 = rollback) */
+#define OTAP_STATE_CONFIRMED    0x80u
+#define OTAP_STATE_COUNT_MAX    0x7Fu
 
-#define OTAP_ACK_OFF_CMD      4u
-#define OTAP_ACK_OFF_STATUS   5u
-#define OTAP_ACK_OFF_INFO     6u
-#define OTAP_ACK_OFF_SLOT     10u
-#define OTAP_ACK_OFF_STATE    11u   /* CHI tra loi FW_INFO: bit7 = da confirm, bit6..0 = boot_count (127 = bi rollback) */
-#define OTAP_STATE_CONFIRMED  0x80u
-#define OTAP_STATE_COUNT_MAX  0x7Fu
+/* AckCmd la byte lap lai o CMD cua lenh duoc tra loi (vd 0x90 cho BEGIN) */
+#define OTAP_ACKCMD(cmd16)      ((uint8_t)((cmd16) & 0xFFu))
 
-#define OTAP_ST_OK            0u
-#define OTAP_ST_REFUSED       1u
-#define OTAP_ST_BAD_SIZE      2u
-#define OTAP_ST_BAD_SEQ       3u
-#define OTAP_ST_CRC_FAIL      4u
-#define OTAP_ST_BUSY          5u
-#define OTAP_ST_NO_COMMIT     6u
-#define OTAP_ST_ERASE_FAIL    7u
-#define OTAP_ST_WRONG_SLOT    8u
-#define OTAP_ST_PROG_FAIL     9u
-#define OTAP_ST_NO_TARGET     10u   /* ROLLBACK: slot kia khong the khoi dong (hong / het luot / da rollback) */
+#define OTAP_ST_OK              0u
+#define OTAP_ST_REFUSED         1u
+#define OTAP_ST_BAD_SIZE        2u
+#define OTAP_ST_BAD_SEQ         3u
+#define OTAP_ST_CRC_FAIL        4u
+#define OTAP_ST_BUSY            5u
+#define OTAP_ST_NO_COMMIT       6u
+#define OTAP_ST_ERASE_FAIL      7u
+#define OTAP_ST_WRONG_SLOT      8u
+#define OTAP_ST_PROG_FAIL       9u
+#define OTAP_ST_NO_TARGET       10u   /* ROLLBACK: slot kia khong the khoi dong */
+#define OTAP_ST_NOT_ERASED      11u   /* BEGIN khi chua ERASE */
 
-/* Tra loi FW_INFO o che do recovery: byte slot = 'R' (App tra 'A'/'B') */
-#define OTAP_SLOT_RECOVERY    'R'
+#define OTAP_SLOT_RECOVERY      'R'
 
 #endif /* OTA_PROTO_H_ */

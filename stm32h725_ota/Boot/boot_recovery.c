@@ -4,20 +4,19 @@
 #include "ota_proto.h"
 #include "ota_image.h"
 #include "cfg_store.h"
-#include "crc16_ccitt.h"
 #include "crc32_sw.h"
 #include "flash.h"
 #include "flash_guard.h"
 
 /* ==========================================================================
- * Cuu ho khi ca 2 slot deu hong. Ca 2 slot deu vo dung nen BEGIN xoa CA HAI;
- * slot dich duoc xac dinh tu Reset_Handler o chunk 0 (anh phai duoc link dung
- * cho slot do - nhu fw_update.c cua app).
+ * Cuu ho khi ca 2 slot deu hong. Trinh tu: INFO -> ERASE (xoa CA HAI slot, ACK khi
+ * xong) -> BEGIN -> DATA... -> END -> COMMIT. Slot dich lay tu Reset_Handler o chunk 0.
  * Mat dien o bat ky buoc nao -> van khong co anh hop le -> lai vao cuu ho.
- * Anh chi duoc coi la hop le khi header (1 flash-word, ghi CUOI) + CRC32 khop.
+ * Anh chi hop le khi header (1 flash-word, ghi CUOI) + CRC32 khop.
+ * Khung/CRC/dia chi: psu_frame.h. Dia chi khac PSU_ADDR bi bo qua.
  * ========================================================================== */
 
-typedef enum { R_IDLE = 0, R_RECEIVING, R_VERIFIED } rstate_t;
+typedef enum { R_IDLE = 0, R_ERASED, R_RECEIVING, R_VERIFIED } rstate_t;
 
 static struct {
     rstate_t   st;
@@ -27,41 +26,36 @@ static struct {
     int32_t    last_seq;
 } r = { R_IDLE, OTA_SLOT_NONE, 0, 0, 0, 0, 0, -1 };
 
-static struct {
-    uint8_t  frm[OTAP_RX_MAX];
-    uint16_t idx, len;
-} rx[REC_PORTS];
+static uint8_t   rx_buf[REC_PORTS][PSU_LEN_FW_DATA];
+static psu_rx_t  rx[REC_PORTS];
+static bool      rx_ready;
+
+static void rx_init_once(void)
+{
+    if (rx_ready) return;
+    for (uint8_t p = 0; p < REC_PORTS; p++) Psu_RxInit(&rx[p], rx_buf[p], PSU_LEN_FW_DATA);
+    rx_ready = true;
+}
 
 /* ==========================================================================
  * TRA LOI
  * ========================================================================== */
-static void put_be32(uint8_t *d, uint32_t v)
+static void send_ack(uint8_t port, uint16_t cmd, uint8_t status, uint32_t info)
 {
-    d[0] = (uint8_t)(v >> 24); d[1] = (uint8_t)(v >> 16);
-    d[2] = (uint8_t)(v >> 8);  d[3] = (uint8_t)v;
-}
+    uint8_t f[PSU_LEN_FW_ACK];
+    Psu_FrameBegin(f, sizeof(f), PSU_CMD_FW_ACK);
 
-static void send_ack(uint8_t port, uint8_t cmd, uint8_t status, uint32_t info)
-{
-    uint8_t f[OTAP_ACK_SZ];
-    memset(f, 0, sizeof(f));
-
-    f[0] = OTAP_HDR1;  f[1] = OTAP_HDR2;
-    f[2] = OTAP_CMD_FW_ACK;
-    f[3] = OTAP_BOARD_ADDR;
-    f[OTAP_ACK_OFF_CMD]    = cmd;
+    f[OTAP_ACK_OFF_CMD]    = OTAP_ACKCMD(cmd);
     f[OTAP_ACK_OFF_STATUS] = status;
-    put_be32(&f[OTAP_ACK_OFF_INFO], info);
+    f[OTAP_ACK_OFF_INFO + 0] = (uint8_t)(info >> 24);
+    f[OTAP_ACK_OFF_INFO + 1] = (uint8_t)(info >> 16);
+    f[OTAP_ACK_OFF_INFO + 2] = (uint8_t)(info >> 8);
+    f[OTAP_ACK_OFF_INFO + 3] = (uint8_t)info;
     f[OTAP_ACK_OFF_SLOT]   = (uint8_t)OTAP_SLOT_RECOVERY;
     f[OTAP_ACK_OFF_STATE]  = 0u;     /* recovery: khong co anh dang chay */
 
-    const uint16_t crc = Crc16_Compute(&f[2], OTAP_ACK_SZ - 4u - 2u);
-    f[OTAP_ACK_SZ - 4u] = (uint8_t)(crc >> 8);
-    f[OTAP_ACK_SZ - 3u] = (uint8_t)crc;
-    f[OTAP_ACK_SZ - 2u] = OTAP_TAIL1;
-    f[OTAP_ACK_SZ - 1u] = OTAP_TAIL2;
-
-    RecHw_Tx(port, f, OTAP_ACK_SZ);
+    Psu_FrameSeal(f, sizeof(f));
+    RecHw_Tx(port, f, sizeof(f));
 }
 
 /* ==========================================================================
@@ -87,16 +81,38 @@ static ota_slot_t slot_of_entry(uint32_t entry)
     return OTA_SLOT_NONE;
 }
 
+static void cmd_erase(uint8_t p)
+{
+    r.st = R_IDLE;
+    r.slot = OTA_SLOT_NONE;
+
+    for (ota_slot_t s = OTA_SLOT_A; s < OTA_SLOT_COUNT; s++) {
+        for (uint8_t k = 0; k < OTA_SLOT_SECTORS; k++) {
+            const flash_op_result_t e = Flash_EraseSector((uint32_t)g_ota_slots[s].sector_first + k);
+            if (!e.ok) {
+                send_ack(p, PSU_CMD_FW_ERASE, OTAP_ST_ERASE_FAIL, e.hal_error);
+                return;
+            }
+        }
+    }
+
+    r.st = R_ERASED;
+    send_ack(p, PSU_CMD_FW_ERASE, OTAP_ST_OK, 1u);      /* info = 1: da xoa xong */
+}
+
 static void cmd_begin(uint8_t p, const uint8_t *f)
 {
-    const uint32_t size = be32(&f[OTAP_BEGIN_OFF_SIZE]);
-
-    if (size == 0u || size > OTA_IMG_MAX_SIZE) {
-        send_ack(p, OTAP_CMD_FW_BEGIN, OTAP_ST_BAD_SIZE, OTA_IMG_MAX_SIZE);
+    if (r.st != R_ERASED) {
+        send_ack(p, PSU_CMD_FW_BEGIN, OTAP_ST_NOT_ERASED, 0u);
         return;
     }
 
-    r.st = R_IDLE;
+    const uint32_t size = be32(&f[OTAP_BEGIN_OFF_SIZE]);
+    if (size == 0u || size > OTA_IMG_MAX_SIZE) {
+        send_ack(p, PSU_CMD_FW_BEGIN, OTAP_ST_BAD_SIZE, OTA_IMG_MAX_SIZE);
+        return;
+    }
+
     r.slot = OTA_SLOT_NONE;
     r.size = size;
     r.crc = be32(&f[OTAP_BEGIN_OFF_CRC32]);
@@ -104,19 +120,8 @@ static void cmd_begin(uint8_t p, const uint8_t *f)
     r.run_crc = CRC32_INIT;
     r.rx_bytes = 0u;
     r.last_seq = -1;
-
-    for (ota_slot_t s = OTA_SLOT_A; s < OTA_SLOT_COUNT; s++) {
-        for (uint8_t k = 0; k < OTA_SLOT_SECTORS; k++) {
-            const flash_op_result_t e = Flash_EraseSector((uint32_t)g_ota_slots[s].sector_first + k);
-            if (!e.ok) {
-                send_ack(p, OTAP_CMD_FW_BEGIN, OTAP_ST_ERASE_FAIL, e.hal_error);
-                return;
-            }
-        }
-    }
-
     r.st = R_RECEIVING;
-    send_ack(p, OTAP_CMD_FW_BEGIN, OTAP_ST_OK, 1u);
+    send_ack(p, PSU_CMD_FW_BEGIN, OTAP_ST_OK, 0u);
 }
 
 /* Ghi 1 chunk day du 256 byte roi doc lai so sanh (ECC/ghi hong) */
@@ -139,18 +144,18 @@ static void cmd_data(uint8_t p, const uint8_t *f)
     const uint8_t *data = &f[OTAP_DATA_OFF_PAYLOAD];
 
     if (r.st != R_RECEIVING) {
-        send_ack(p, OTAP_CMD_FW_DATA, OTAP_ST_BUSY, 0u);
+        send_ack(p, PSU_CMD_FW_DATA, OTAP_ST_BUSY, 0u);
         return;
     }
     if ((int32_t)seq != r.last_seq + 1) {
-        send_ack(p, OTAP_CMD_FW_DATA, OTAP_ST_BAD_SEQ, (uint32_t)(r.last_seq < 0 ? 0 : r.last_seq));
+        send_ack(p, PSU_CMD_FW_DATA, OTAP_ST_BAD_SEQ, (uint32_t)(r.last_seq < 0 ? 0 : r.last_seq));
         return;
     }
 
     const uint32_t off = (uint32_t)seq * OTAP_CHUNK_MAX;
     if (len == 0u || len > OTAP_CHUNK_MAX || (off + len) > r.size ||
         (len < OTAP_CHUNK_MAX && (off + len) != r.size)) {
-        send_ack(p, OTAP_CMD_FW_DATA, OTAP_ST_BAD_SIZE, 0u);
+        send_ack(p, PSU_CMD_FW_DATA, OTAP_ST_BAD_SIZE, 0u);
         return;
     }
 
@@ -160,8 +165,8 @@ static void cmd_data(uint8_t p, const uint8_t *f)
             : 0u;
         r.slot = slot_of_entry(reset_handler);
         if (r.slot == OTA_SLOT_NONE) {
-            r.st = R_IDLE;
-            send_ack(p, OTAP_CMD_FW_DATA, OTAP_ST_WRONG_SLOT, reset_handler);
+            r.st = R_ERASED;       /* chua ghi gi -> van sach, co the BEGIN lai */
+            send_ack(p, PSU_CMD_FW_DATA, OTAP_ST_WRONG_SLOT, reset_handler);
             return;
         }
     }
@@ -172,35 +177,35 @@ static void cmd_data(uint8_t p, const uint8_t *f)
 
     const uint32_t addr = Ota_CodeBase(r.slot) + off;
     if (!prog_chunk(addr, buf)) {
-        r.st = R_IDLE;
-        send_ack(p, OTAP_CMD_FW_DATA, OTAP_ST_PROG_FAIL, addr);
+        r.st = R_IDLE;             /* flash co the da ghi do -> phai ERASE lai */
+        send_ack(p, PSU_CMD_FW_DATA, OTAP_ST_PROG_FAIL, addr);
         return;
     }
 
     r.run_crc   = Crc32_Update(r.run_crc, data, len);
     r.rx_bytes += len;
     r.last_seq  = (int32_t)seq;
-    send_ack(p, OTAP_CMD_FW_DATA, OTAP_ST_OK, (uint32_t)seq);
+    send_ack(p, PSU_CMD_FW_DATA, OTAP_ST_OK, (uint32_t)seq);
 }
 
 static void cmd_end(uint8_t p)
 {
     if (r.st != R_RECEIVING || r.slot == OTA_SLOT_NONE) {
-        send_ack(p, OTAP_CMD_FW_END, OTAP_ST_BUSY, 0u);
+        send_ack(p, PSU_CMD_FW_END, OTAP_ST_BUSY, 0u);
         return;
     }
 
     const uint32_t final_crc = Crc32_Finalize(r.run_crc);
     if (r.rx_bytes != r.size || final_crc != r.crc) {
         r.st = R_IDLE;
-        send_ack(p, OTAP_CMD_FW_END, OTAP_ST_CRC_FAIL, final_crc);
+        send_ack(p, PSU_CMD_FW_END, OTAP_ST_CRC_FAIL, final_crc);
         return;
     }
 
     const uint32_t seq = CfgStore_AllocInstallSeq();
     if (seq == 0u) {
         r.st = R_IDLE;
-        send_ack(p, OTAP_CMD_FW_END, OTAP_ST_REFUSED, 0u);
+        send_ack(p, PSU_CMD_FW_END, OTAP_ST_REFUSED, 0u);
         return;
     }
 
@@ -217,104 +222,66 @@ static void cmd_end(uint8_t p)
                                                    (const uint8_t *)&hdr, OTA_HEADER_SIZE);
     if (!w.ok) {
         r.st = R_IDLE;
-        send_ack(p, OTAP_CMD_FW_END, OTAP_ST_PROG_FAIL, w.hal_error);
+        send_ack(p, PSU_CMD_FW_END, OTAP_ST_PROG_FAIL, w.hal_error);
         return;
     }
 
     if (!Ota_ImageValid(r.slot) || !Ota_VectorOk(r.slot)) {
         r.st = R_IDLE;
-        send_ack(p, OTAP_CMD_FW_END, OTAP_ST_CRC_FAIL, 0u);
+        send_ack(p, PSU_CMD_FW_END, OTAP_ST_CRC_FAIL, 0u);
         return;
     }
 
     if (!CfgStore_WriteBoot(r.slot, 0u, 0u)) {
         r.st = R_IDLE;
-        send_ack(p, OTAP_CMD_FW_END, OTAP_ST_REFUSED, 1u);
+        send_ack(p, PSU_CMD_FW_END, OTAP_ST_REFUSED, 1u);
         return;
     }
 
     r.st = R_VERIFIED;
-    send_ack(p, OTAP_CMD_FW_END, OTAP_ST_OK, 1u);
+    send_ack(p, PSU_CMD_FW_END, OTAP_ST_OK, 1u);
 }
 
 static void cmd_commit(uint8_t p)
 {
     if (r.st != R_VERIFIED) {
-        send_ack(p, OTAP_CMD_FW_COMMIT, OTAP_ST_NO_COMMIT, 0u);
+        send_ack(p, PSU_CMD_FW_COMMIT, OTAP_ST_NO_COMMIT, 0u);
         return;
     }
-    send_ack(p, OTAP_CMD_FW_COMMIT, OTAP_ST_OK, 0u);
+    send_ack(p, PSU_CMD_FW_COMMIT, OTAP_ST_OK, 0u);
     RecHw_ResetSystem();
 }
 
 static void exec(uint8_t p, const uint8_t *f, uint16_t n)
 {
-    const uint16_t crc_off = (uint16_t)(n - 4u);
-    const uint16_t crc_rx  = be16(&f[crc_off]);
-    if (crc_rx != Crc16_Compute(&f[2], (uint32_t)(crc_off - 2u))) return;
+    if (!Psu_FrameValid(f, n))      return;
+    if (Psu_Addr(f) != PSU_ADDR)    return;
 
-    /* Giong app: khong loc theo ADDR (da co mach rieng cho tung cong) */
-    switch (f[2]) {
-    case OTAP_CMD_FW_BEGIN:  cmd_begin(p, f);  break;
-    case OTAP_CMD_FW_DATA:   cmd_data(p, f);   break;
-    case OTAP_CMD_FW_END:    cmd_end(p);       break;
-    case OTAP_CMD_FW_COMMIT: cmd_commit(p);    break;
-    case OTAP_CMD_FW_INFO:   send_ack(p, OTAP_CMD_FW_INFO, OTAP_ST_OK, 0u); break;
-    default: break;
+    switch (Psu_Cmd(f)) {
+    case PSU_CMD_FW_ERASE:   cmd_erase(p);     break;
+    case PSU_CMD_FW_BEGIN:   cmd_begin(p, f);  break;
+    case PSU_CMD_FW_DATA:    cmd_data(p, f);   break;
+    case PSU_CMD_FW_END:     cmd_end(p);       break;
+    case PSU_CMD_FW_COMMIT:  cmd_commit(p);    break;
+    case PSU_CMD_FW_INFO:    send_ack(p, PSU_CMD_FW_INFO, OTAP_ST_OK, 0u); break;
+    default: break;          /* lenh khac (ke ca ROLLBACK, giam sat) khong co o recovery */
     }
 }
 
 /* ==========================================================================
- * TACH KHUNG (bo cuc giong comm.c rx_feed)
+ * NHAN BYTE
  * ========================================================================== */
-static uint16_t frame_len(uint8_t cmd)
-{
-    switch (cmd) {
-    case OTAP_CMD_FW_BEGIN:  return OTAP_BEGIN_SZ;
-    case OTAP_CMD_FW_DATA:   return OTAP_DATA_FRAME_SZ;
-    case OTAP_CMD_FW_END:
-    case OTAP_CMD_FW_COMMIT:
-    case OTAP_CMD_FW_INFO:   return OTAP_CTRL_SZ;
-    default:                 return 0u;
-    }
-}
-
 void Boot_RecoveryResync(uint8_t port)
 {
-    if (port < REC_PORTS) rx[port].idx = 0u;
+    rx_init_once();
+    if (port < REC_PORTS) Psu_RxReset(&rx[port]);
 }
 
 void Boot_RecoveryFeed(uint8_t p, uint8_t c)
 {
+    rx_init_once();
     if (p >= REC_PORTS) return;
-    uint16_t k = rx[p].idx;
 
-    switch (k) {
-    case 0:
-        if (c == OTAP_HDR1) { rx[p].frm[0] = c; rx[p].idx = 1u; }
-        return;
-    case 1:
-        if (c == OTAP_HDR2) { rx[p].frm[1] = c; rx[p].idx = 2u; }
-        else if (c != OTAP_HDR1) { rx[p].idx = 0u; }
-        return;
-    case 2:
-        rx[p].len = frame_len(c);
-        if (rx[p].len == 0u) { rx[p].idx = 0u; return; }
-        rx[p].frm[2] = c;
-        rx[p].idx = 3u;
-        return;
-    default:
-        if (k >= OTAP_RX_MAX) { rx[p].idx = 0u; return; }
-        rx[p].frm[k] = c;
-        rx[p].idx = (uint16_t)(k + 1u);
-        break;
-    }
-
-    const uint16_t n = rx[p].len;
-    if (rx[p].idx < n) return;
-
-    rx[p].idx = 0u;
-    if (rx[p].frm[n - 2u] == OTAP_TAIL1 && rx[p].frm[n - 1u] == OTAP_TAIL2) {
-        exec(p, rx[p].frm, n);
-    }
+    const uint16_t n = Psu_RxFeed(&rx[p], c);
+    if (n != 0u) exec(p, rx[p].buf, n);
 }

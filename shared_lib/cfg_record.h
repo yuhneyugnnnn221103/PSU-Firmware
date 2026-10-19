@@ -8,10 +8,19 @@
 #define CFG_REC_COUNT       (OTA_CFG_SIZE / CFG_REC_SIZE)   /* 2048 ban ghi / bank */
 #define CFG_PAYLOAD_MAX     48u
 
-#define CFG_REC_TYPE_LIMITS     1u
+/* type 1 (LIMITS cu) da bo; ban ghi cu bi bo qua */
 #define CFG_REC_TYPE_BOOT       2u
 #define CFG_REC_TYPE_INSTALL    3u
 #define CFG_REC_TYPE_COMMIT     4u   /* danh dau bank hop le, ghi CUOI snapshot */
+#define CFG_REC_TYPE_BLOB_CHUNK 5u   /* 1 manh cua blob cau hinh */
+#define CFG_REC_TYPE_BLOB_COMMIT 6u  /* ghi SAU CUNG cua mot lan ghi blob: chot do dai + CRC32 */
+
+/* Blob (vd cau hinh PSU 904 byte) luu thanh nhieu manh. Doc chi chap nhan blob
+ * khi du manh + CRC32 dung, nen mat dien giua chung khong lam hong ban cu. */
+#define CFG_BLOB_MAX            1024u
+#define CFG_BLOB_CHUNK_DATA     44u
+#define CFG_BLOB_MAX_CHUNKS     ((CFG_BLOB_MAX + CFG_BLOB_CHUNK_DATA - 1u) / CFG_BLOB_CHUNK_DATA)   /* 24 */
+#define CFG_BLOB_PSU            0u   /* id blob cau hinh PSU */
 
 #define CFG_BOOT_COUNT_FORCE_FAIL   0xFFFFFFFFu
 
@@ -26,12 +35,6 @@ typedef struct {
     uint8_t  payload[CFG_PAYLOAD_MAX];  /* 12 */
     uint32_t crc32;                     /* 60 : CRC32 cua byte 0..59 */
 } cfg_record_t;
-
-typedef struct {
-    uint16_t sovl[4];
-    uint16_t bovl[4];
-    uint16_t buvl[4];
-} cfg_limits_payload_t;
 
 typedef struct {
     uint32_t boot_count;
