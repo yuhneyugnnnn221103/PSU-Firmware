@@ -470,10 +470,9 @@ ina228_dev_t *ina228_get_dev(uint8_t idx)
 /* ==========================================================================
  * NGUONG DUOI (SUVL, BUVL) - chi nap khi armed
  * ========================================================================== */
-void ina228_set_under_armed(bool armed)
+void ina228_set_under_armed(ina228_dev_t *dev, bool armed)
 {
-    if (!s_bus.inited) return;
-    for (uint8_t i = 0; i < INA228_CH_COUNT; i++) s_bus.devs[i].under_armed = armed;
+    if (dev != NULL) dev->under_armed = armed;
 }
 
 ina228_status_t ina228_limits_sync(void)

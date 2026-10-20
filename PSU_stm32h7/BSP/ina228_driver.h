@@ -102,7 +102,7 @@ void ina228_set_regs(ina228_dev_t *dev, const uint16_t regs[INA228_NREGS]);
  *        thap hon BUVL la binh thuong; neu nap nguong that thi chan ALERT keo xuong lien tuc va
  *        Safety_FastTrip co the cat nguon nham. Chi dat co; ina228_limits_sync() moi ghi IC.
  */
-void ina228_set_under_armed(bool armed);
+void ina228_set_under_armed(ina228_dev_t *dev, bool armed);
 
 /** @brief Ghi SUVL/BUVL cho kenh nao co (under_applied != under_armed). BLOCKING, goi khi bus IDLE. */
 ina228_status_t ina228_limits_sync(void);

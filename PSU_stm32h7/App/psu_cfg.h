@@ -5,10 +5,11 @@
 #include <stdbool.h>
 
 /* Anh cau hinh PSU 904 byte = phan trong khung 04 04 / 82 82 nam giua Mask (2 byte) va CRC:
- *   [0..767]   4 cum DCM x 192 B (nguong ADC/AMC/XDP, cau hinh XDP, ADS) - chi luu va tra lai
+ *   [0..767]   4 cum DCM x 192 B (nguong ADC/AMC/XDP, cau hinh XDP, ADS). 36 byte dau moi cum = nguong
+ *              I_OUT_ADC1..3 / TEMP_ADC1..3 (MAX, MIN): firmware tu so sanh (psu_trip); phan con lai chi luu va tra lai
  *   [768..839] 4 INA x 9 thanh ghi x 2 B (CONFIG, ADC_CONFIG, SHUNT_CAL, SHUNT_TEMPCO,
- *              SOVL, SUVL, BOVL, BUVL, TEMP_LIMIT)  - nap vao INA
- *   [840..887] nguong Supply 8 x (MAX, MIN) x 3 B     - firmware tu so sanh (psu_trip)
+ *              SOVL, SUVL, BOVL, BUVL, TEMP_LIMIT)  - INA1..3 duoc nap vao IC; khoi INA4 chi luu (INA4 bo qua)
+ *   [840..887] nguong Supply 8 x (MAX, MIN) x 3 B     - chi luu va tra lai (cum Supply chua co du lieu)
  *   [888..903] du phong 16 B                          - chi luu va tra lai */
 #define PSU_CFG_LEN          904u
 #define PSU_CFG_OFF_INA      768u

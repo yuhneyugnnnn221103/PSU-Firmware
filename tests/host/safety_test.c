@@ -1,4 +1,5 @@
-/* Test may trang thai safety (safety.c that, phan cung gia). */
+/* Test may trang thai safety theo cum (safety.c that, phan cung gia).
+ * Cum 1 co phan cung (INA1..3, chan EN, 4 chan FT); cum 2..4 chua co. Khong con LOCKOUT. */
 #include <stdio.h>
 #include <string.h>
 #include "main.h"
@@ -20,17 +21,20 @@ static uint8_t dcm;
 uint8_t Comm_DcmFault(void){ return dcm; }
 bool Comm_PcLinkAlive(uint32_t n){ (void)n; return true; }
 fwu_state_t FwUpdate_State(void){ return FWU_IDLE; }
-void Led_SetStatus(safe_state_t st, fault_code_t c, uint8_t f){ (void)st;(void)c;(void)f; }
+static safe_state_t led_st; static fault_code_t led_code;
+void Led_SetStatus(safe_state_t st, fault_code_t c, uint8_t f){ led_st = st; led_code = c; (void)f; }
 
 static int fails;
 #define CHECK(c,...) do{ if(!(c)){ printf("FAIL: " __VA_ARGS__); printf("\n"); fails++; } }while(0)
 
-static void run(uint32_t ms){ for(uint32_t i=0;i<ms;i++){ now_ms++; for(int c=0;c<4;c++) devs[c].meas.timestamp_ms = now_ms; Safety_Task(now_ms);} }
-static void clear_diag(void){ for(int c=0;c<4;c++) devs[c].diag_sticky = 0; }
+static void run(uint32_t ms){ for(uint32_t i=0;i<ms;i++){ now_ms++; for(int c=0;c<INA228_CH_COUNT;c++) devs[c].meas.timestamp_ms = now_ms; Safety_Task(now_ms);} }
+static void clear_diag(void){ for(int c=0;c<INA228_CH_COUNT;c++) devs[c].diag_sticky = 0; }
+static void fresh_start(void){ memset(devs,0,sizeof devs); dcm=0; Safety_Init(); run(SAFE_BOOT_MS + 5); }
+static void thr_none(void){ uint8_t z[4*PSU_TRIP_CLUSTER_STRIDE]; memset(z,0,sizeof z); PsuTrip_SetThresholds(z); }
 
 static void power_up(void)
 {
-    CHECK(Safety_RequestPower(true),"request on");
+    Safety_Control(0x01, false);
     run(SAFE_OFF_MIN_MS + 5);   /* OFF -> ARMING */
     run(SAFE_ARM_MS + 5);       /* ARMING -> ON  */
 }
@@ -38,140 +42,109 @@ static void trip_overcurrent(void){ devs[0].diag_sticky |= INA228_FLAG_SHNTOL; r
 
 int main(void)
 {
-    for (int c=0;c<4;c++) devs[c].meas.timestamp_ms = 0;
-    Safety_Init();
-    CHECK(Safety_State()==SAFE_BOOT && !pwr_pin,"boot");
-    run(SAFE_BOOT_MS + 5);
-    CHECK(Safety_State()==SAFE_OFF,"-> OFF");
+    thr_none();
+    fresh_start();
+    for (int c=0;c<4;c++) CHECK(Safety_State(c)==SAFE_OFF, "cum %d -> OFF sau boot", c);
+    CHECK(Safety_AllOff() && !Safety_AnyPowerOn() && !pwr_pin, "tat ca OFF luc dau");
+
+    /* --- Cum 2..4 chua co phan cung: luon OFF, bo qua lenh bat --- */
+    Safety_Control(0x0E, false); run(SAFE_OFF_MIN_MS + 50);
+    for (int c=1;c<4;c++) CHECK(Safety_State(c)==SAFE_OFF && !Safety_PowerIsOn(c), "cum %d khong co EN: van OFF", c);
+    CHECK(!Safety_RequestPower(1,true) && Safety_RequestPower(1,false), "cum chua co EN: tu choi bat, chap nhan tat");
+    CHECK(Safety_State(0)==SAFE_OFF && !pwr_pin, "bit 1..3 cua mask khong dieu khien EN cum 1");
+
+    /* --- Cum 1 len nguon --- */
     power_up();
-    CHECK(Safety_State()==SAFE_ON && pwr_pin,"-> ON (state=%d)",Safety_State());
+    CHECK(Safety_State(0)==SAFE_ON && pwr_pin && Safety_IsArmed(0) && Safety_AnyPowerOn() && !Safety_AllOff(), "cum 1 ON (state=%d)", Safety_State(0));
+    CHECK(Safety_ClusterOfIna(0)==0 && Safety_ClusterOfIna(1)==0 && Safety_ClusterOfIna(2)==0 && Safety_ClusterOfIna(3)==0xFF, "INA1..3 thuoc cum 1; INA4 khong thuoc cum nao");
+    CHECK(led_st==SAFE_ON, "LED nhan trang thai cum noi bat nhat");
 
-    /* --- C1: CLR_FAULT khong reset bo dem; 3 trip lien tiep -> LOCKOUT --- */
+    /* --- Trip: giu cho den ClearTrip --- */
     trip_overcurrent();
-    CHECK(Safety_State()==SAFE_TRIPPED && Safety_Code()==FCODE_OVERCUR && !pwr_pin,"trip 1");
-    CHECK(!Safety_RequestPower(true),"TRIPPED phai tu choi bat");
-    Safety_ClearFault(); clear_diag();
-    CHECK(Safety_State()==SAFE_OFF && Safety_TripCount()==1,"CLR_FAULT khong duoc xoa trip_count (=%u)",Safety_TripCount());
-    power_up(); trip_overcurrent(); Safety_ClearFault(); clear_diag();
-    CHECK(Safety_TripCount()==2,"trip 2 count=%u",Safety_TripCount());
-    power_up(); trip_overcurrent();
-    CHECK(Safety_State()==SAFE_LOCKOUT,"trip 3 -> LOCKOUT (state=%d)",Safety_State());
-    CHECK(Safety_Code()==FCODE_OVERCUR,"LOCKOUT phai giu ma loi (=%d)",Safety_Code());
-    uint8_t mask = Safety_TripMask();
-    Safety_ClearFault(); run(5);
-    CHECK(Safety_State()==SAFE_LOCKOUT && Safety_Code()==FCODE_OVERCUR && Safety_TripMask()==mask,"CLR_FAULT trong LOCKOUT phai bi bo qua");
-    CHECK(!Safety_RequestPower(true),"LOCKOUT tu choi bat");
-    run(1000); CHECK(!pwr_pin && Safety_State()==SAFE_LOCKOUT,"LOCKOUT giu tat nguon");
-
-    /* --- C2: lan trip thu 3 qua duong nhanh (ISR): ma loi phai duoc phan loai trong LOCKOUT --- */
-    memset(devs,0,sizeof devs); dcm=0;
-    Safety_Init(); run(SAFE_BOOT_MS + 5);
-    for (int n=1; n<=3; n++) {
-        power_up();
-        CHECK(Safety_State()==SAFE_ON,"n=%d len ON",n);
-        Safety_FastTrip();
-        CHECK(!pwr_pin,"n=%d FastTrip cat ngay",n);
-        run(2);
-        if (n < 3) {
-            CHECK(Safety_State()==SAFE_TRIPPED && Safety_Code()==FCODE_NONE,"n=%d TRIPPED chua co ma",n);
-            run(SAFE_SETTLE_MS + 5);
-            CHECK(Safety_Code()==FCODE_BUS,"n=%d khong co diag -> BUS (=%d)",n,Safety_Code());
-            Safety_ClearFault();
-        }
-    }
-    CHECK(Safety_State()==SAFE_LOCKOUT,"fast trip 3 -> LOCKOUT");
-    CHECK(Safety_Code()==FCODE_NONE,"truoc settle chua co ma");
-    /* CLR_FAULT chen vao trong cua so phan loai: bi bo qua */
-    Safety_ClearFault();
-    CHECK(Safety_State()==SAFE_LOCKOUT,"CLR_FAULT trong cua so phan loai khong duoc thoat LOCKOUT");
-    devs[2].diag_sticky |= INA228_FLAG_BUSOL;             /* diag den muon, sau trip */
-    run(SAFE_SETTLE_MS + 5);
-    CHECK(Safety_Code()==FCODE_OVERVOLT && (Safety_TripMask() & 0x4u),"LOCKOUT phai phan loai ma loi tu diag (=%d mask=%u)",Safety_Code(),Safety_TripMask());
-
-    /* --- CLR_FAULT chen giua vong khi vua trip lan 3 (TRIPPED, Task chua chay sang LOCKOUT) --- */
-    memset(devs,0,sizeof devs);
-    Safety_Init(); run(SAFE_BOOT_MS + 5);
-    for (int n=1;n<=2;n++){ power_up(); trip_overcurrent(); Safety_ClearFault(); clear_diag(); }
-    power_up(); devs[0].diag_sticky |= INA228_FLAG_SHNTOL;
-    now_ms++; Safety_Task(now_ms);                         /* ON -> TRIPPED (count=3), chua sang LOCKOUT */
-    CHECK(Safety_State()==SAFE_TRIPPED && Safety_TripCount()==3,"vua trip lan 3 (state=%d cnt=%u)",Safety_State(),Safety_TripCount());
-    Safety_ClearFault();
-    CHECK(Safety_State()==SAFE_LOCKOUT,"CLR_FAULT chen giua khong duoc ve OFF (state=%d)",Safety_State());
-
-    /* --- Chay on dinh >= SAFE_STABLE_MS thi bo dem reset: khong lockout --- */
-    memset(devs,0,sizeof devs);
-    Safety_Init(); run(SAFE_BOOT_MS + 5);
-    for (int n=1;n<=2;n++){ power_up(); trip_overcurrent(); Safety_ClearFault(); clear_diag(); }
-    power_up(); run(SAFE_STABLE_MS + 50);
-    CHECK(Safety_State()==SAFE_ON && Safety_TripCount()==0,"on dinh phai reset bo dem (cnt=%u)",Safety_TripCount());
-    trip_overcurrent();
-    CHECK(Safety_State()==SAFE_TRIPPED && Safety_TripCount()==1,"sau on dinh chi tinh la trip 1");
-
-
-    /* ====== Trip code: so sanh nguong tren STM, latch cho den Clear ====== */
-    memset(devs,0,sizeof devs); dcm=0;
-    Safety_Init(); run(SAFE_BOOT_MS + 5);
-    { uint8_t thr[PSU_SUP_THR_LEN]; memset(thr,0,sizeof thr);
-      thr[3*6+0]=0x60; /* V_5V MAX = 0x600000 (k=3) */  PsuTrip_SetThresholds(thr); }
-    for (int c=0;c<4;c++) devs[c].raw.vbus_reg24 = 0x500000;
-    power_up();
-    CHECK(Safety_State()==SAFE_ON && !PsuTrip_Any(), "ON, trong nguong");
-    devs[1].raw.vbus_reg24 = 0x610000;                      /* INA2 (5V) vuot MAX */
-    run(5);
-    CHECK(Safety_State()==SAFE_TRIPPED && Safety_Code()==FCODE_THRESHOLD, "vuot nguong -> TRIPPED, ma THRESHOLD (state=%d code=%d)",Safety_State(),Safety_Code());
-    CHECK(PsuTrip_Bytes()[PSU_TRIP_B_SUP_MAX]==(1u<<3) && PsuTrip_Bytes()[PSU_TRIP_B_SUP_MIN]==0, "bit V_5V MAX");
-    devs[1].raw.vbus_reg24 = 0x500000; run(2000);
-    CHECK(PsuTrip_Bytes()[PSU_TRIP_B_SUP_MAX]==(1u<<3), "trip giu nguyen khi gia tri tro lai binh thuong, cho den Clear");
+    CHECK(Safety_State(0)==SAFE_TRIPPED && Safety_Code(0)==FCODE_OVERCUR && !pwr_pin, "trip qua dong");
+    CHECK(led_st==SAFE_TRIPPED && led_code==FCODE_OVERCUR, "LED bao TRIPPED");
+    run(5000); clear_diag(); run(5);
+    CHECK(Safety_State(0)==SAFE_TRIPPED, "TRIPPED giu cho den ClearTrip");
     Safety_Control(0x01, false);
-    CHECK(Safety_State()==SAFE_TRIPPED, "dang TRIPPED: lenh bat bi tu choi");
+    CHECK(Safety_State(0)==SAFE_TRIPPED, "dang TRIPPED: lenh bat bi tu choi");
     Safety_Control(0x01, true);                             /* Clear + bat trong cung khung */
-    CHECK(Safety_State()==SAFE_OFF && !PsuTrip_Any(), "Clear xoa trip, ve OFF");
+    CHECK(Safety_State(0)==SAFE_OFF && !PsuTrip_Any(), "ClearTrip: xoa trip code, ve OFF");
     run(SAFE_OFF_MIN_MS + 50);
-    CHECK(Safety_State()==SAFE_OFF && !pwr_pin, "lenh bat cung khung voi Clear bi bo qua");
-    Safety_Control(0x01, false);
-    run(SAFE_OFF_MIN_MS + 5); run(SAFE_ARM_MS + 5);
-    CHECK(Safety_State()==SAFE_ON && pwr_pin, "bat lai o khung sau");
-    Safety_Control(0x01, true);                             /* Clear khi dang ON, mask bat: giu nguyen ON */
-    run(5);
-    CHECK(Safety_State()==SAFE_ON && pwr_pin, "Clear khi dang ON khong tat nguon");
-    Safety_Control(0x00, false); run(5);
-    CHECK(Safety_State()==SAFE_OFF && !pwr_pin, "mask=0 -> tat");
-    Safety_Control(0x0E, false);                            /* bit 1..3 bo qua (chua co cum 2..4) */
-    run(SAFE_OFF_MIN_MS + 5);
-    CHECK(Safety_State()==SAFE_OFF, "chi bit0 dieu khien PWR_EN");
-
-    /* Duoi MIN chi tinh khi ON: luc OFF/ARMING V ~ 0 khong trip */
-    memset(devs,0,sizeof devs); Safety_Init(); run(SAFE_BOOT_MS + 5);
-    { uint8_t thr[PSU_SUP_THR_LEN]; memset(thr,0,sizeof thr); thr[1*6+5]=0x40; /* V_DCM MIN = 0x000040? dat 0x004000 */ thr[1*6+4]=0x40; thr[1*6+5]=0; PsuTrip_SetThresholds(thr); }
-    for (int c=0;c<4;c++) devs[c].raw.vbus_reg24 = 0;       /* chua co dien ap */
-    CHECK(Safety_RequestPower(true),"bat");
-    run(SAFE_OFF_MIN_MS + 5); run(SAFE_ARM_MS - 50);
-    CHECK(Safety_State()==SAFE_ARMING && !PsuTrip_Any(), "ARMING: V thap khong trip");
-    for (int c=0;c<4;c++) devs[c].raw.vbus_reg24 = 0x500000;
-    run(100);
-    CHECK(Safety_State()==SAFE_ON && !PsuTrip_Any(), "ON binh thuong");
-    devs[0].raw.vbus_reg24 = 0x001000; run(5);
-    CHECK(Safety_State()==SAFE_TRIPPED && (PsuTrip_Bytes()[PSU_TRIP_B_SUP_MIN] & 0x02) , "ON: V_DCM duoi MIN -> trip");
-
-    /* Co phan cung INA -> bit trip; LOCKOUT giu trip code */
-    memset(devs,0,sizeof devs); { uint8_t z[PSU_SUP_THR_LEN]; memset(z,0,sizeof z); PsuTrip_SetThresholds(z); }
-    Safety_Init(); run(SAFE_BOOT_MS + 5);
-    power_up(); devs[2].diag_sticky |= INA228_FLAG_SHNTOL | INA228_FLAG_BUSOL; run(3);
-    CHECK(Safety_Code()==FCODE_OVERCUR && (PsuTrip_Bytes()[PSU_TRIP_B_INA_OC] & 0x04) && (PsuTrip_Bytes()[PSU_TRIP_B_INA_V] & 0x04), "co INA kenh 3 -> TRIP3/TRIP4 bit 2");
-    Safety_ClearFault(); clear_diag();
-    CHECK(!PsuTrip_Any(), "Clear xoa bit INA");
-    power_up(); devs[0].diag_sticky |= INA228_FLAG_SHNTOL; run(3); Safety_ClearFault(); clear_diag();
-    power_up(); devs[0].diag_sticky |= INA228_FLAG_SHNTOL; run(3);
-    CHECK(Safety_State()==SAFE_LOCKOUT, "lockout");
-    uint8_t keep[PSU_TRIP_BYTES]; memcpy(keep, PsuTrip_Bytes(), sizeof keep);
-    CHECK(keep[PSU_TRIP_B_MISC] & PSU_TRIP_MISC_LOCKOUT, "LOCKOUT co bit MISC");
+    CHECK(Safety_State(0)==SAFE_OFF && !pwr_pin, "lenh bat cung khung voi ClearTrip bi bo qua");
+    Safety_Control(0x01, false); run(SAFE_OFF_MIN_MS + 5); run(SAFE_ARM_MS + 5);
+    CHECK(Safety_State(0)==SAFE_ON, "bat lai o khung sau");
     Safety_Control(0x01, true); run(5);
-    CHECK(memcmp(keep, PsuTrip_Bytes(), sizeof keep)==0 && Safety_State()==SAFE_LOCKOUT, "Clear khong xoa trip code trong LOCKOUT");
+    CHECK(Safety_State(0)==SAFE_ON && pwr_pin, "ClearTrip khi dang ON khong tat nguon");
+    Safety_Control(0x00, false); run(5);
+    CHECK(Safety_State(0)==SAFE_OFF && !pwr_pin, "mask bit0 = 0 -> tat");
 
-    /* Chan FT cua DCM -> bit TRIP5 cao */
-    memset(devs,0,sizeof devs); Safety_Init(); run(SAFE_BOOT_MS + 5); power_up();
-    dcm = 0x02; run(3);
-    CHECK(Safety_Code()==FCODE_DCM && (PsuTrip_Bytes()[PSU_TRIP_B_TEMP_FT] & 0x20), "FT cua DCM 2 -> bit 5 cua TRIP5");
+    /* --- KHONG con LOCKOUT: trip nhieu lan lien tiep van chi cat nguon, ClearTrip thoat duoc --- */
+    fresh_start();
+    for (int n=1; n<=6; n++) {
+        power_up();
+        CHECK(Safety_State(0)==SAFE_ON, "lan %d len ON duoc (khong khoa)", n);
+        trip_overcurrent();
+        CHECK(Safety_State(0)==SAFE_TRIPPED && Safety_TripCount(0)==n, "trip lan %d (count=%u)", n, Safety_TripCount(0));
+        Safety_Control(0x00, true); clear_diag();
+    }
+    power_up(); run(SAFE_STABLE_MS + 50);
+    CHECK(Safety_TripCount(0)==0, "chay on dinh -> dem trip ve 0");
+
+    /* --- Duong nhanh (ISR): theo INA, INA4 bo qua --- */
+    fresh_start(); power_up();
+    Safety_FastTrip(3);                                     /* INA4: khong thuoc cum nao */
+    run(3);
+    CHECK(Safety_State(0)==SAFE_ON && pwr_pin, "ALERT cua INA4 bi bo qua");
+    Safety_FastTrip(1);
+    CHECK(!pwr_pin, "FastTrip INA2 cat EN cum 1 ngay");
+    run(2);
+    CHECK(Safety_State(0)==SAFE_TRIPPED && Safety_Code(0)==FCODE_NONE, "TRIPPED chua co ma");
+    devs[2].diag_sticky |= INA228_FLAG_BUSOL;
+    run(SAFE_SETTLE_MS + 5);
+    CHECK(Safety_Code(0)==FCODE_OVERVOLT && (PsuTrip_Bytes()[PSU_TRIP_B_INA_V] & 0x04), "ma loi phan loai sau settle; bit BUSOL INA3");
+    fresh_start(); power_up(); Safety_FastTrip(0); run(SAFE_SETTLE_MS + 10);
+    CHECK(Safety_Code(0)==FCODE_BUS && (PsuTrip_Bytes()[PSU_TRIP_B_MISC] & PSU_TRIP_MISC_UNKNOWN), "khong co diag -> BUS + bit UNKNOWN");
+
+    /* --- So nguong tren STM (cum 1): I_OUT_ADC2 MAX, TEMP_ADC3 MIN --- */
+    fresh_start();
+    { uint8_t cfg[4*PSU_TRIP_CLUSTER_STRIDE]; memset(cfg,0,sizeof cfg);
+      cfg[12+0]=0x10;                       /* I_OUT_ADC2 MAX = 0x100000 (offset 12) */
+      cfg[33+1]=0x01;                       /* TEMP_ADC3 MIN = 0x000100 (offset 30 MAX, 33 MIN: 00 01 00) */
+      PsuTrip_SetThresholds(cfg); }
+    for (int c=0;c<3;c++) { devs[c].raw.current_reg24 = 0x000010; devs[c].raw.dietemp_raw = 0x0800; }
+    power_up();
+    CHECK(Safety_State(0)==SAFE_ON && !PsuTrip_Any(), "trong nguong");
+    devs[1].raw.current_reg24 = 0x110000; run(5);
+    CHECK(Safety_State(0)==SAFE_TRIPPED && Safety_Code(0)==FCODE_THRESHOLD, "I_OUT_ADC2 vuot MAX (state=%d code=%d)", Safety_State(0), Safety_Code(0));
+    CHECK(PsuTrip_Bytes()[PSU_TRIP_B_SW_MAX]==0x02 && PsuTrip_Bytes()[PSU_TRIP_B_SW_MIN]==0, "TRIP1 bit1");
+    devs[1].raw.current_reg24 = 0x000010; run(2000);
+    CHECK(PsuTrip_Bytes()[PSU_TRIP_B_SW_MAX]==0x02, "trip giu nguyen khi gia tri tro lai binh thuong");
+    Safety_Control(0x00, true);
+    CHECK(!PsuTrip_Any() && Safety_State(0)==SAFE_OFF, "ClearTrip xoa");
+    power_up();
+    devs[2].raw.dietemp_raw = 0x0010; run(5);                /* duoi MIN 0x100 */
+    CHECK(Safety_State(0)==SAFE_TRIPPED && (PsuTrip_Bytes()[PSU_TRIP_B_SW_MIN] & (1u<<(PSU_DCM_PER_CLUSTER+2))), "TEMP_ADC3 duoi MIN -> TRIP2 bit5");
+
+    /* Duoi MIN chi tinh khi ON: luc OFF/ARMING gia tri ~ 0 khong trip */
+    fresh_start();
+    { uint8_t cfg[4*PSU_TRIP_CLUSTER_STRIDE]; memset(cfg,0,sizeof cfg); cfg[3+1]=0x10; PsuTrip_SetThresholds(cfg); }  /* I_OUT_ADC1 MIN = 0x001000 */
+    for (int c=0;c<3;c++) devs[c].raw.current_reg24 = 0;
+    Safety_Control(0x01,false); run(SAFE_OFF_MIN_MS + 5); run(SAFE_ARM_MS - 50);
+    CHECK(Safety_State(0)==SAFE_ARMING && !PsuTrip_Any(), "ARMING: gia tri thap khong trip");
+    for (int c=0;c<3;c++) devs[c].raw.current_reg24 = 0x002000;
+    run(100);
+    CHECK(Safety_State(0)==SAFE_ON && !PsuTrip_Any(), "ON binh thuong");
+
+    /* --- Co phan cung INA -> bit trip --- */
+    fresh_start(); thr_none(); power_up();
+    devs[2].diag_sticky |= INA228_FLAG_SHNTOL | INA228_FLAG_BUSOL; run(3);
+    CHECK(Safety_Code(0)==FCODE_OVERCUR && (PsuTrip_Bytes()[PSU_TRIP_B_INA_OC] & 0x04) && (PsuTrip_Bytes()[PSU_TRIP_B_INA_V] & 0x04), "co INA3 -> TRIP3/TRIP4 bit 2");
+    Safety_ClearFault(); clear_diag();
+    CHECK(!PsuTrip_Any(), "ClearTrip xoa bit INA");
+
+    /* --- Chan FT cua DCM thuoc cum 1 (ca FT4) --- */
+    fresh_start(); power_up(); dcm = 0x08; run(3);
+    CHECK(Safety_Code(0)==FCODE_DCM && (PsuTrip_Bytes()[PSU_TRIP_B_TEMP_FT] & 0x40), "FT cua DCM4 -> bit 6 cua TRIP5");
     dcm = 0;
 
     /* --- Safety_ForceOff: ghi BSRR reset bit, khong phu thuoc state --- */

@@ -228,16 +228,19 @@ static bool send_monitor(uint8_t port)
     psu_mon_t m;
     memset(&m, 0, sizeof(m));
 
-    for (uint8_t i = 0; i < INA228_CH_COUNT; i++) {
+    /* INA1..3 = DCM1..3 cua cum 1: dong (thanh ghi CURRENT tho) va nhiet do (DIETEMP tho) */
+    for (uint8_t i = 0; i < INA228_CH_COUNT && i < PSU_DCM_PER_CLUSTER; i++) {
         const ina228_dev_t *d = ina228_get_dev(i);
         if (d == NULL) continue;
-        m.cur24[i]  = d->raw.current_reg24;
-        m.vbus24[i] = d->raw.vbus_reg24;
+        m.cur24[i] = d->raw.current_reg24;
+        m.temp[i]  = d->raw.dietemp_raw;
         if (ina228_is_fresh(d, now)) m.fresh_mask |= (uint8_t)(1u << i);
     }
-    m.safe_state  = (uint8_t)Safety_State();
-    m.trip_count  = Safety_TripCount();
-    m.pwr_on      = Safety_PowerIsOn();
+    for (uint8_t c = 0; c < PSU_CLUSTERS; c++) {
+        m.safe_state[c] = (uint8_t)Safety_State(c);
+        m.trip_count[c] = Safety_TripCount(c);
+        m.pwr_on[c]     = Safety_PowerIsOn(c);
+    }
     m.slot        = FwUpdate_RunningSlot();
     m.version     = FwUpdate_RunningVersion();
     m.trip        = PsuTrip_Bytes();
@@ -280,9 +283,9 @@ static void rx_exec(uint8_t p, const uint8_t *f)
         break;
 
     case PSU_CMD_CFG_WRITE:         /* khong ACK; PC doc lai de kiem tra */
-        /* Doi thanh ghi INA/nguong khi nguon dang bat se doi thang do va ngat bao ve -> chi khi SAFE_OFF.
+        /* Doi thanh ghi INA/nguong khi nguon dang bat se doi thang do va ngat bao ve -> chi khi moi cum OFF.
          * Mask (byte 5..6) bo qua: luon ghi de toan bo. */
-        if (Safety_State() == SAFE_OFF && !FwUpdate_IsBusy()) {
+        if (Safety_AllOff() && !FwUpdate_IsBusy()) {
             (void)PsuCfg_Store(&f[7]);
         }
         break;

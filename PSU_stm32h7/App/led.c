@@ -126,12 +126,6 @@ void Led_SetStatus(safe_state_t st, fault_code_t code, uint8_t flags)
         if (r == 0uL) r = PAT_5HZ;   /* code chua phan loai xong */
         break;
 
-    case SAFE_LOCKOUT:
-        g = PAT_OFF;
-        b = PAT_OFF;
-        r = PAT_SOLID;
-        break;
-
     default:
         g = PAT_OFF;  b = PAT_OFF;  r = PAT_5HZ;
         break;

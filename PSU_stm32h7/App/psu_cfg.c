@@ -38,7 +38,7 @@ void PsuCfg_BuildDefault(uint8_t *blob)
 
 static void apply_thresholds(void)
 {
-    PsuTrip_SetThresholds(&s_blob[PSU_CFG_OFF_SUPPLY]);
+    PsuTrip_SetThresholds(s_blob);          /* nguong cua 4 cum (khoi dau anh cau hinh) */
 }
 
 void PsuCfg_Load(void)

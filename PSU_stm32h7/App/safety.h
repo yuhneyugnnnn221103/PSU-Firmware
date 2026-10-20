@@ -4,12 +4,13 @@
  * @brief   Lop bao ve cuc bo: phat hien loi tu INA228 / DCM -> cat PWR_EN.
  *
  * NGUYEN TAC:
- *   1. Chan PWR_EN_CTRL la MOT chan dung chung cho ca 4 kenh (theo schematic).
- *      => Loi o BAT KY kenh nao cung cat nguon CA HE THONG. Khong the lam khac.
+ *   1. MOI CUM DCM (3 DCM) co mot chan EN va mot may trang thai rieng (4 cum).
+ *      Loi o DCM nao cung cat nguon CA CUM do. Mach bring-up chi co EN cua cum 1
+ *      (= PWR_EN_CTRL, dieu khien 4 DCM); cum 2..4 chua co phan cung: luon OFF.
  *   2. Duong nhanh (EXTI) cat nguon truoc, phan loai loi sau. Do tre ~2 us
  *      thay vi vai chuc ms neu doi ina228_alert_process().
- *   3. LATCH cung. Chi PC gui CLR_FAULT roi PWR_CTRL(on) moi bat lai duoc.
- *      Khong tu dong thu lai.
+ *   3. LATCH cung. Chi PC gui ClearTrip roi lenh bat moi bat lai duoc. Khong tu dong
+ *      thu lai va KHONG co trang thai khoa: trip nghiem trong chi cat nguon cum do.
  *   4. Khi nguon TAT thi V_bus = 0 -> BUSUL luon dung. Bit nay bi mask trong
  *      moi trang thai khac SAFE_ON, neu khong se khong bao gio thoat duoc latch.
  *
@@ -25,6 +26,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "psu_topology.h"
 
 /* ==========================================================================
  * CAU HINH
@@ -59,10 +61,7 @@
 /* Cho INA228 hoan tat chu ky do dau tien truoc khi roi SAFE_BOOT. */
 #define SAFE_BOOT_MS           500u
 
-/* So lan trip lien tiep truoc khi vao LOCKOUT vinh vien. */
-#define SAFE_TRIP_LOCKOUT_N    3u
-
-/* Chay on dinh du lau thi coi nhu su co truoc do da duoc khac phuc. */
+/* Chay on dinh du lau thi dem trip lien tiep ve 0 (chi de bao cao; khong con khoa). */
 #define SAFE_STABLE_MS         10000u
 
 /* Mat lien lac I2C voi INA228 co cat nguon khong?
@@ -79,8 +78,7 @@ typedef enum {
     SAFE_OFF     = 1,  /* nguon tat theo lenh PC (khong phai loi)     */
     SAFE_ARMING  = 2,  /* vua bat nguon, dang cho qua inrush          */
     SAFE_ON      = 3,  /* chay binh thuong, giam sat day du           */
-    SAFE_TRIPPED = 4,  /* da cat nguon do loi, cho PC xoa             */
-    SAFE_LOCKOUT = 5   /* het so lan thu lai -> khoa vinh vien        */
+    SAFE_TRIPPED = 4   /* da cat nguon do loi, cho PC xoa (ClearTrip) */
 } safe_state_t;
 
 /* Ma loi = so nhay den DO. Gia tri NHO hon = uu tien cao hon (nguyen nhan goc). */
@@ -90,52 +88,57 @@ typedef enum {
     FCODE_OVERVOLT  = 2,  /* BUSOL                 */
     FCODE_UNDERVOLT = 3,  /* BUSUL                 */
     FCODE_OVERTEMP  = 4,  /* TMPOL                 */
-    FCODE_DCM       = 5,  /* chan FT_SECn tu DCM   */
+    FCODE_DCM       = 5,  /* chan FT tu DCM        */
     FCODE_BUS       = 6,  /* mat lien lac I2C      */
     FCODE_THRESHOLD = 7   /* STM tu so sanh nguong (psu_trip) vuot MAX/MIN */
 } fault_code_t;
 
 /* ==========================================================================
- * API
+ * API  (c = chi so cum, 0..PSU_CLUSTERS-1)
  * ========================================================================== */
 
-/** @brief Goi MOT LAN trong main(), NGAY SAU MX_GPIO_Init() va truoc
- *         ina228_init_all(). Dat PWR_EN ve muc TAT. */
+/** @brief Goi MOT LAN, SAU MX_GPIO_Init() va truoc ina228_init_all(). Dat moi chan EN ve TAT. */
 void Safety_Init(void);
 
-/** @brief Goi tu HAL_GPIO_EXTI_Callback khi chan ALERT cua INA228 kich.
- *         Cat nguon ngay lap tuc. KHONG cham I2C, KHONG blocking. */
-void Safety_FastTrip(void);
+/** @brief Goi tu HAL_GPIO_EXTI_Callback khi chan ALERT cua INA `ina_idx` kich. Cat nguon cum chua INA
+ *         do ngay lap tuc. KHONG cham I2C, KHONG blocking. */
+void Safety_FastTrip(uint8_t ina_idx);
 
 /** @brief Goi moi vong main loop, SAU ina228_alert_process(). */
 void Safety_Task(uint32_t now_ms);
 
-/** @brief Xu ly lenh 0x88 PWR_CTRL tu PC.
- *  @retval false neu dang TRIPPED/LOCKOUT va PC yeu cau BAT -> tu choi. */
-bool Safety_RequestPower(bool on);
+/** @brief Yeu cau bat/tat cum c. @retval false neu cum khong co phan cung, dang TRIPPED hoac dang nap code. */
+bool Safety_RequestPower(uint8_t c, bool on);
 
-/** @brief Clear trip: xoa trip code + co tich luy cua INA. Neu dang TRIPPED thi ve SAFE_OFF va huy yeu cau bat
- *         (KHONG tu bat lai: PC phai gui lenh bat o khung sau). O trang thai khac KHONG doi bat/tat.
- *         KHONG reset bo dem trip (chi reset sau SAFE_STABLE_MS o SAFE_ON).
- *         O SAFE_LOCKOUT: bi bo qua (chi thoat bang reset phan cung), trip code duoc giu. */
+/** @brief Clear trip (TOAN PSU, 1 byte ClearTrip cua khung 01 01): xoa trip code + co tich luy cua INA; cum nao
+ *         dang TRIPPED thi ve SAFE_OFF va huy yeu cau bat (KHONG tu bat lai). Cum khac KHONG doi bat/tat.
+ *         KHONG reset bo dem trip (chi reset sau SAFE_STABLE_MS o SAFE_ON). */
 void Safety_ClearFault(void);
 
-/** @brief Cat PWR_EN ngay, KHONG phu thuoc state/HAL. Dung trong fault handler. */
-void Safety_ForceOff(void);
-
-/** @brief Lenh dieu khien 01 01. Phan cung hien tai: 1 chan PWR_EN = cum 1 (bit0 cua mask); bit khac bo qua.
- *         clear = ClearTrip: xoa trip code va thoat TRIPPED ve OFF; khi do lenh bat trong CUNG khung bi
- *         bo qua (PC gui lenh bat o khung sau). Moi lenh khong clear ghi de trang thai bat/tat. */
+/** @brief Lenh dieu khien 01 01. Bit c cua mask = bat/tat cum c (cum chua co phan cung: bo qua). Moi lenh khong
+ *         clear ghi de trang thai bat/tat. clear = ClearTrip: cum vua duoc xoa khoi TRIPPED bo qua lenh bat trong
+ *         CUNG khung (PC gui lenh bat o khung sau). */
 void Safety_Control(uint8_t mask, bool clear);
 
-/** @brief true khi dang SAFE_ON: duoc phep nap nguong duoi cua INA va so sanh nguong. */
-bool Safety_IsArmed(void);
+/** @brief Cat moi chan EN, KHONG phu thuoc trang thai/HAL. Dung trong fault handler. */
+void Safety_ForceOff(void);
 
-/* --- Truy van trang thai (dung cho khung STATUS 0x03 va LED) --- */
-safe_state_t Safety_State(void);
-fault_code_t Safety_Code(void);
-uint8_t      Safety_TripMask(void);   /* bit i = kenh i gop phan gay trip */
-bool         Safety_PowerIsOn(void);  /* trang thai LOGIC cua PWR_EN      */
-uint8_t      Safety_TripCount(void);  /* so lan trip lien tiep (khoa LOCKOUT) */
+/** @brief true khi cum c dang SAFE_ON: duoc phep nap nguong duoi cua INA va so sanh nguong. */
+bool Safety_IsArmed(uint8_t c);
+
+/** @brief Cum chua INA `ina_idx` (0xFF neu khong thuoc cum nao). */
+uint8_t Safety_ClusterOfIna(uint8_t ina_idx);
+
+/** @brief Moi cum deu SAFE_OFF (dieu kien de ghi cau hinh / nap code). */
+bool Safety_AllOff(void);
+
+/** @brief Co chan EN nao dang bat (trang thai LOGIC)? */
+bool Safety_AnyPowerOn(void);
+
+/* --- Truy van trang thai tung cum --- */
+safe_state_t Safety_State(uint8_t c);
+fault_code_t Safety_Code(uint8_t c);
+bool         Safety_PowerIsOn(uint8_t c);  /* trang thai LOGIC cua chan EN cum c */
+uint8_t      Safety_TripCount(uint8_t c);  /* so lan trip lien tiep (chi bao cao) */
 
 #endif /* SAFETY_H_ */

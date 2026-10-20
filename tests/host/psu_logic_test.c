@@ -14,78 +14,97 @@ static int fails;
 
 static void put24(uint8_t *d, uint32_t v){ d[0]=v>>16; d[1]=v>>8; d[2]=v; }
 
-/* ---- so sanh nguong ---- */
+/* ---- so sanh nguong (cum 1: 3 DCM x {dong, nhiet do}) ---- */
 static uint32_t stamp;
-static psu_trip_in_t in_make(int32_t cur, uint32_t vbus)    /* 4 kenh cung gia tri */
+static psu_trip_in_t in_make(int32_t cur, int16_t temp)    /* 3 DCM cung gia tri */
 {
     psu_trip_in_t in; memset(&in,0,sizeof in); stamp += 60;
-    for (int c=0;c<4;c++){ in.cur24[c]=(uint32_t)cur & 0xFFFFFFu; in.vbus24[c]=vbus; in.fresh[c]=true; in.stamp[c]=stamp; }
+    for (int n=0;n<3;n++){ in.cur24[n]=(uint32_t)cur & 0xFFFFFFu; in.temp[n]=temp; in.fresh[n]=true; in.stamp[n]=stamp; }
     return in;
 }
-static void set_thr(uint8_t k, uint32_t mx, uint32_t mn){ uint8_t t[PSU_SUP_THR_LEN]; memset(t,0,sizeof t); put24(&t[k*6],mx); put24(&t[k*6+3],mn); PsuTrip_SetThresholds(t); }
+/* dat 1 nguong cua cum 1: k = 0 I1, 1 T1, 2 I2, 3 T2, 4 I3, 5 T3 */
+static void set_thr(uint8_t k, uint32_t mx, uint32_t mn)
+{
+    uint8_t cfg[4*PSU_TRIP_CLUSTER_STRIDE]; memset(cfg,0,sizeof cfg);
+    put24(&cfg[k*6],mx); put24(&cfg[k*6+3],mn); PsuTrip_SetThresholds(cfg);
+}
 
 static void test_trip(void)
 {
     PsuTrip_Init();
-    /* nguong V_5V (k=3, kenh INA2): MAX 0x600000, MIN 0x400000; khong nguong khac */
-    set_thr(3, 0x600000, 0x400000);
-    psu_trip_in_t in = in_make(0, 0x500000);
-    CHECK(!PsuTrip_Evaluate(true,&in) && !PsuTrip_Any(), "trong nguong khong trip");
+    /* nguong I_OUT_ADC2 (k=2): MAX 0x600000, MIN 0x400000 */
+    set_thr(2, 0x600000, 0x400000);
+    psu_trip_in_t in = in_make(0x500000, 0);
+    CHECK(!PsuTrip_Evaluate(0,true,&in) && !PsuTrip_Any(), "trong nguong khong trip");
 
-    in = in_make(0, 0x610000);
-    CHECK(!PsuTrip_Evaluate(true,&in), "mau vuot dau tien chua latch (N=%u)", PSU_TRIP_CONFIRM_N);
+    in = in_make(0x610000, 0);
+    CHECK(!PsuTrip_Evaluate(0,true,&in), "mau vuot dau tien chua latch (N=%u)", PSU_TRIP_CONFIRM_N);
     CHECK(!PsuTrip_Any(), "chua latch");
-    in = in_make(0, 0x500000);   /* quay ve trong nguong -> reset chuoi */
-    PsuTrip_Evaluate(true,&in);
-    in = in_make(0, 0x610000); PsuTrip_Evaluate(true,&in);
+    in = in_make(0x500000, 0); PsuTrip_Evaluate(0,true,&in);   /* quay ve trong nguong -> reset chuoi */
+    in = in_make(0x610000, 0); PsuTrip_Evaluate(0,true,&in);
     CHECK(!PsuTrip_Any(), "chuoi bi ngat thi dem lai");
-    in = in_make(0, 0x610000);
-    CHECK(PsuTrip_Evaluate(true,&in), "N mau lien tiep -> latch");
-    CHECK(PsuTrip_Bytes()[PSU_TRIP_B_SUP_MAX]==(1u<<3) && PsuTrip_Bytes()[PSU_TRIP_B_SUP_MIN]==0, "bit MAX cua V_5V (k=3)");
+    in = in_make(0x610000, 0);
+    CHECK(PsuTrip_Evaluate(0,true,&in), "N mau lien tiep -> latch");
+    CHECK(PsuTrip_Bytes()[PSU_TRIP_B_SW_MAX]==(1u<<1) && PsuTrip_Bytes()[PSU_TRIP_B_SW_MIN]==0, "bit MAX cua I_OUT_ADC2 (bit 1)");
 
     /* giu nguyen cho den Clear, ke ca khi gia tri ve binh thuong */
-    in = in_make(0, 0x500000); PsuTrip_Evaluate(true,&in); PsuTrip_Evaluate(true,&in);
-    CHECK(PsuTrip_Bytes()[PSU_TRIP_B_SUP_MAX]==(1u<<3), "trip giu nguyen khi gia tri tro lai binh thuong");
+    in = in_make(0x500000, 0); PsuTrip_Evaluate(0,true,&in); PsuTrip_Evaluate(0,true,&in);
+    CHECK(PsuTrip_Bytes()[PSU_TRIP_B_SW_MAX]==(1u<<1), "trip giu nguyen khi gia tri tro lai binh thuong");
     PsuTrip_Clear();
     CHECK(!PsuTrip_Any(), "Clear xoa trip");
 
     /* MIN */
-    in = in_make(0, 0x300000); PsuTrip_Evaluate(true,&in);
-    in = in_make(0, 0x300000);
-    CHECK(PsuTrip_Evaluate(true,&in) && PsuTrip_Bytes()[PSU_TRIP_B_SUP_MIN]==(1u<<3), "duoi MIN -> bit MIN");
+    in = in_make(0x300000, 0); PsuTrip_Evaluate(0,true,&in);
+    in = in_make(0x300000, 0);
+    CHECK(PsuTrip_Evaluate(0,true,&in) && PsuTrip_Bytes()[PSU_TRIP_B_SW_MIN]==(1u<<1), "duoi MIN -> bit MIN");
     PsuTrip_Clear();
 
-    /* khong armed: khong so sanh va reset chuoi (V ~ 0 luc OFF/ARMING khong bi tinh la duoi MIN) */
-    in = in_make(0, 0); PsuTrip_Evaluate(false,&in); in = in_make(0, 0);
-    CHECK(!PsuTrip_Evaluate(false,&in) && !PsuTrip_Any(), "khong armed khong trip");
-    in = in_make(0, 0x300000); PsuTrip_Evaluate(false,&in);          /* mau 1 luc chua armed */
-    in = in_make(0, 0x300000); CHECK(!PsuTrip_Evaluate(true,&in), "vao armed phai dem N mau moi (khong tinh mau cu)");
+    /* khong armed: khong so sanh va reset chuoi (gia tri ~ 0 luc OFF/ARMING khong bi tinh la duoi MIN) */
+    in = in_make(0, 0); PsuTrip_Evaluate(0,false,&in); in = in_make(0, 0);
+    CHECK(!PsuTrip_Evaluate(0,false,&in) && !PsuTrip_Any(), "khong armed khong trip");
+    in = in_make(0x300000, 0); PsuTrip_Evaluate(0,false,&in);          /* mau 1 luc chua armed */
+    in = in_make(0x300000, 0); CHECK(!PsuTrip_Evaluate(0,true,&in), "vao armed phai dem N mau moi (khong tinh mau cu)");
 
     /* cung mot mau (stamp khong doi) khong duoc dem 2 lan */
     PsuTrip_Clear();
-    in = in_make(0, 0x700000);
-    PsuTrip_Evaluate(true,&in);
-    CHECK(!PsuTrip_Evaluate(true,&in), "mau khong doi (stamp) khong tinh them");
+    in = in_make(0x700000, 0);
+    PsuTrip_Evaluate(0,true,&in);
+    CHECK(!PsuTrip_Evaluate(0,true,&in), "mau khong doi (stamp) khong tinh them");
 
-    /* kenh khong tuoi: khong so sanh */
+    /* DCM khong tuoi: khong so sanh */
     PsuTrip_Clear();
-    in = in_make(0, 0x700000); in.fresh[1] = false; PsuTrip_Evaluate(true,&in); in = in_make(0,0x700000); in.fresh[1]=false;
-    CHECK(!PsuTrip_Evaluate(true,&in), "kenh khong tuoi khong trip");
+    in = in_make(0x700000, 0); in.fresh[1] = false; PsuTrip_Evaluate(0,true,&in); in = in_make(0x700000,0); in.fresh[1]=false;
+    CHECK(!PsuTrip_Evaluate(0,true,&in), "DCM khong tuoi khong trip");
 
-    /* dong co dau: I_DCM (k=0) MAX = +0x100000, MIN = -0x100000 (0xF00000) */
+    /* dong co dau: I_OUT_ADC1 (k=0) MAX = +0x100000, MIN = -0x100000 (0xF00000) */
     PsuTrip_Init(); set_thr(0, 0x100000, 0xF00000);
-    in = in_make(0x080000, 0); PsuTrip_Evaluate(true,&in); in = in_make(0x080000, 0);
-    CHECK(!PsuTrip_Evaluate(true,&in), "dong trong [-,+] khong trip");
-    in = in_make(-0x180000, 0); PsuTrip_Evaluate(true,&in); in = in_make(-0x180000, 0);
-    CHECK(PsuTrip_Evaluate(true,&in) && PsuTrip_Bytes()[PSU_TRIP_B_SUP_MIN]==1u, "dong am duoi MIN co dau -> trip MIN");
+    in = in_make(0x080000, 0); PsuTrip_Evaluate(0,true,&in); in = in_make(0x080000, 0);
+    CHECK(!PsuTrip_Evaluate(0,true,&in), "dong trong [-,+] khong trip");
+    in = in_make(-0x180000, 0); PsuTrip_Evaluate(0,true,&in); in = in_make(-0x180000, 0);
+    CHECK(PsuTrip_Evaluate(0,true,&in) && PsuTrip_Bytes()[PSU_TRIP_B_SW_MIN]==1u, "dong am duoi MIN co dau -> trip MIN");
     PsuTrip_Clear();
-    in = in_make(0x180000, 0); PsuTrip_Evaluate(true,&in); in = in_make(0x180000, 0);
-    CHECK(PsuTrip_Evaluate(true,&in) && PsuTrip_Bytes()[PSU_TRIP_B_SUP_MAX]==1u, "dong duong tren MAX -> trip MAX");
+    in = in_make(0x180000, 0); PsuTrip_Evaluate(0,true,&in); in = in_make(0x180000, 0);
+    CHECK(PsuTrip_Evaluate(0,true,&in) && PsuTrip_Bytes()[PSU_TRIP_B_SW_MAX]==1u, "dong duong tren MAX -> trip MAX");
+
+    /* nhiet do co dau 16 bit: TEMP_ADC3 (k=5): MAX 0x000C80 (100 C), MIN 0x00FF38 (-10 C) */
+    PsuTrip_Init(); set_thr(5, 0x000C80, 0x00FF38);
+    in = in_make(0, 0x0400); PsuTrip_Evaluate(0,true,&in); in = in_make(0, 0x0400);
+    CHECK(!PsuTrip_Evaluate(0,true,&in), "nhiet do trong nguong");
+    in = in_make(0, 0x0D00); PsuTrip_Evaluate(0,true,&in); in = in_make(0, 0x0D00);
+    CHECK(PsuTrip_Evaluate(0,true,&in) && PsuTrip_Bytes()[PSU_TRIP_B_SW_MAX]==(1u<<(3+2)), "TEMP_ADC3 vuot MAX -> bit 5");
+    PsuTrip_Clear();
+    in = in_make(0, (int16_t)0xFE00); PsuTrip_Evaluate(0,true,&in); in = in_make(0, (int16_t)0xFE00);
+    CHECK(PsuTrip_Evaluate(0,true,&in) && PsuTrip_Bytes()[PSU_TRIP_B_SW_MIN]==(1u<<(3+2)), "TEMP_ADC3 duoi MIN (am) -> bit 5");
 
     /* nguong 0 = tat */
     PsuTrip_Init(); set_thr(0, 0, 0);
-    in = in_make(0x7FFFF0, 0xFFFFF0); PsuTrip_Evaluate(true,&in); in = in_make(0x7FFFF0, 0xFFFFF0);
-    CHECK(!PsuTrip_Evaluate(true,&in) && !PsuTrip_Any(), "nguong 0 = tat");
+    in = in_make(0x7FFFF0, 0x7FFF); PsuTrip_Evaluate(0,true,&in); in = in_make(0x7FFFF0, 0x7FFF);
+    CHECK(!PsuTrip_Evaluate(0,true,&in) && !PsuTrip_Any(), "nguong 0 = tat");
+
+    /* cum 2..4: chua co bang bit -> khong trip */
+    PsuTrip_Init(); { uint8_t cfg[4*PSU_TRIP_CLUSTER_STRIDE]; memset(cfg,0,sizeof cfg); put24(&cfg[PSU_TRIP_CLUSTER_STRIDE],0x000001); PsuTrip_SetThresholds(cfg); }
+    in = in_make(0x7FFFF0, 0); PsuTrip_Evaluate(1,true,&in); in = in_make(0x7FFFF0, 0);
+    CHECK(!PsuTrip_Evaluate(1,true,&in) && !PsuTrip_Any(), "cum 2 chua gan bit trip");
 
     /* nguon trip khac + giu nguyen */
     PsuTrip_Init();
@@ -101,28 +120,32 @@ static void test_monitor(void)
 {
     psu_mon_t m; memset(&m,0,sizeof m);
     uint8_t trip[PSU_TRIP_BYTES]; for (int i=0;i<10;i++) trip[i]=(uint8_t)(0xA0+i);
-    for (int c=0;c<4;c++){ m.cur24[c]=0x112233u+c; m.vbus24[c]=0x445566u+c; }
-    m.fresh_mask=0x0D; m.safe_state=3; m.trip_count=2; m.pwr_on=true; m.slot='B'; m.version=0xAABBCCDD; m.trip=trip;
+    for (int n=0;n<3;n++){ m.cur24[n]=0x112233u+n; m.temp[n]=(int16_t)(0x0A00+n); }
+    m.temp[2] = (int16_t)0xFF38;                       /* -200 (am) */
+    m.fresh_mask=0x05;                                 /* DCM1 va DCM3 tuoi, DCM2 mat du lieu */
+    m.safe_state[0]=3; m.pwr_on[0]=true;  m.trip_count[0]=2;
+    m.safe_state[1]=1; m.pwr_on[1]=false; m.trip_count[1]=0;
+    m.safe_state[3]=4; m.pwr_on[3]=false; m.trip_count[3]=7;
+    m.slot='B'; m.version=0xAABBCCDD; m.trip=trip;
 
     uint8_t f[PSU_LEN_MONITOR]; PsuMon_Build(f,&m);
     CHECK(f[0]==0xAB && f[1]==0xCD && f[2]==0x81 && f[3]==0x81 && f[4]==PSU_ADDR, "header 81 81 + dia chi");
     CHECK(Psu_FrameValid(f,PSU_LEN_MONITOR), "CRC/duoi hop le");
-    /* vi tri theo tai lieu (1-based): Supply 198..221, RTC 222..228, Trip 229..238, Du phong 239..262, CRC 263-264 */
-    CHECK(f[197]==0x11 && f[198]==0x22 && f[199]==0x33 && f[200]==0x44 && f[201]==0x55 && f[202]==0x66, "INA1 -> I_DCM, V_DCM (byte 198..203)");
-    CHECK(f[203]==0 && f[208]==0, "INA2 khong tuoi -> 0");
-    CHECK(f[209]==0x11 && f[210]==0x22 && f[211]==0x35 && f[212]==0x44 && f[214]==0x68, "INA3 -> I_3V3_1 (byte 210..)");
-    CHECK(f[215]==0x11 && f[216]==0x22 && f[217]==0x36 && f[218]==0x44 && f[219]==0x55 && f[220]==0x69, "INA4 tuoi -> I_3V3_2, V_3V3_2 (byte 216..221)");
-    int zero=1; for (int i=5;i<197;i++) if (f[i]) zero=0; CHECK(zero, "4 cum DCM = 0 (byte 6..197)");
+    /* Cum 1 (tai lieu, 1-based): I_OUT_ADC1 6-8, TEMP_ADC1 9-11, I_OUT_ADC2 12-14, TEMP_ADC2 15-17, I_OUT_ADC3 18-20, TEMP_ADC3 21-23 */
+    CHECK(f[5]==0x11 && f[6]==0x22 && f[7]==0x33 && f[8]==0x00 && f[9]==0x0A && f[10]==0x00, "DCM1: I_OUT_ADC1, TEMP_ADC1 (byte 6..11)");
+    CHECK(f[11]==0 && f[12]==0 && f[13]==0 && f[14]==0 && f[15]==0 && f[16]==0, "DCM2 khong tuoi -> 0");
+    CHECK(f[17]==0x11 && f[18]==0x22 && f[19]==0x35 && f[20]==0x00 && f[21]==0xFF && f[22]==0x38, "DCM3: I_OUT_ADC3, TEMP_ADC3 am (byte 18..23)");
+    int zero=1; for (int i=23;i<221;i++) if (f[i]) zero=0; CHECK(zero, "phan con lai cua cum 1, cum 2..4 va Supply = 0 (byte 24..221)");
     zero=1; for (int i=221;i<228;i++) if (f[i]) zero=0; CHECK(zero, "RTC = 0");
     CHECK(memcmp(&f[228], trip, 10)==0, "10 trip byte o 229..238");
-    /* vung du phong 24 byte (byte 239..262): chi giu safe_state, PWR_EN, trip count, slot, version */
-    CHECK(f[238]==3 && f[239]==1 && f[240]==2 && f[241]=='B', "du phong: safe_state, PWR_EN, trip count, slot");
-    CHECK(f[242]==0xAA && f[243]==0xBB && f[244]==0xCC && f[245]==0xDD, "du phong: version BE");
-    zero=1; for (int i=246;i<262;i++) if (f[i]) zero=0; CHECK(zero, "phan con lai cua vung du phong = 0");
+    /* vung du phong 24 byte (byte 239..262): 4 x {safe_state, PWR_EN, trip count}, slot, version */
+    CHECK(f[238]==3 && f[239]==1 && f[240]==2, "cum 1: ON, PWR_EN, trip count 2");
+    CHECK(f[241]==1 && f[242]==0 && f[243]==0, "cum 2: OFF");
+    CHECK(f[244]==0 && f[245]==0 && f[246]==0, "cum 3: BOOT(0) mac dinh trong mau");
+    CHECK(f[247]==4 && f[248]==0 && f[249]==7, "cum 4: TRIPPED, trip count 7");
+    CHECK(f[250]=='B' && f[251]==0xAA && f[252]==0xBB && f[253]==0xCC && f[254]==0xDD, "slot, version BE");
+    zero=1; for (int i=255;i<262;i++) if (f[i]) zero=0; CHECK(zero, "phan con lai cua vung du phong = 0");
     CHECK(f[262]*256+f[263] == Psu_Crc16(f,PSU_LEN_MONITOR) && f[264]==0xE1 && f[265]==0xE2, "CRC + duoi o cuoi");
-
-    m.pwr_on=false; m.safe_state=1; PsuMon_Build(f,&m);
-    CHECK(f[238]==1 && f[239]==0, "PWR_EN tat, safe_state OFF");
 }
 
 /* ---- anh cau hinh ---- */
@@ -155,14 +178,12 @@ static void test_cfg(void)
     CHECK(PsuCfg_IsStored() && memcmp(PsuCfg_Blob(), w, PSU_CFG_LEN)==0, "nap lai tu Flash sau reset");
     CHECK(!PsuCfg_ConsumeDirty(), "nap luc khoi dong khong dirty");
 
-    /* nguong Supply duoc dua vao so sanh */
-    uint8_t w2[PSU_CFG_LEN]; memset(w2,0,sizeof w2);
-    put24(&w2[PSU_CFG_OFF_SUPPLY + 0], 0x000100);          /* I_DCM MAX */
-    PsuCfg_BuildDefault(w2 + 0);  /* ghi de INA mac dinh vao w2 */
-    put24(&w2[PSU_CFG_OFF_SUPPLY + 0], 0x000100);
+    /* nguong cum 1 trong cau hinh duoc dua vao so sanh: I_OUT_ADC1 MAX (offset 0) */
+    uint8_t w2[PSU_CFG_LEN]; PsuCfg_BuildDefault(w2);
+    put24(&w2[0], 0x000100);
     CHECK(PsuCfg_Store(w2), "luu cau hinh 2");
-    psu_trip_in_t in = in_make(0x000200, 0); PsuTrip_Evaluate(true,&in); in = in_make(0x000200,0);
-    CHECK(PsuTrip_Evaluate(true,&in) && PsuTrip_Bytes()[PSU_TRIP_B_SUP_MAX]==1, "nguong luu trong cau hinh duoc dung de so sanh");
+    psu_trip_in_t in = in_make(0x000200, 0); PsuTrip_Evaluate(0,true,&in); in = in_make(0x000200,0);
+    CHECK(PsuTrip_Evaluate(0,true,&in) && PsuTrip_Bytes()[PSU_TRIP_B_SW_MAX]==1, "nguong luu trong cau hinh duoc dung de so sanh");
 }
 
 int main(void)

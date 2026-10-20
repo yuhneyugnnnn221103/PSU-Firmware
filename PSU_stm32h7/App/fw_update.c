@@ -110,7 +110,7 @@ uint8_t FwUpdate_Erase(uint32_t *out_info)
         return OTAP_ST_WRONG_SLOT;
     }
 
-    if (Safety_State() != SAFE_OFF) {
+    if (!Safety_AllOff()) {
         return OTAP_ST_REFUSED;
     }
 
@@ -139,7 +139,7 @@ uint8_t FwUpdate_Begin(uint32_t total_size, uint32_t crc32_total,
 {
     if (out_info) *out_info = 0u;
 
-    if (Safety_State() != SAFE_OFF) {
+    if (!Safety_AllOff()) {
         return OTAP_ST_REFUSED;
     }
     if (s.state == FWU_IDLE) {
@@ -373,7 +373,7 @@ bool FwUpdate_TakeTimeout(void)
 
 uint8_t FwUpdate_RequestRollBack(void)
 {
-	if (Safety_State() != SAFE_OFF)	return OTAP_ST_REFUSED;
+	if (!Safety_AllOff())	return OTAP_ST_REFUSED;
 	if (s.state != FWU_IDLE)		return OTAP_ST_BUSY;
 	if (my_slot() == OTA_SLOT_NONE)	return OTAP_ST_WRONG_SLOT;
 

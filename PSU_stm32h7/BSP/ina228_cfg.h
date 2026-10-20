@@ -30,7 +30,8 @@
 #define INA228_ADDR_CH3           0x44u   /* A1=VS , A0=GND */
 #define INA228_ADDR_CH4           0x45u   /* A1=VS , A0=VS  */
 
-#define INA228_CH_COUNT           4u
+/* Chi 3 INA giam sat (INA1..3 = DCM1..3 cua cum 1). INA4 tren mach KHONG duoc doc/cau hinh/bao ve. */
+#define INA228_CH_COUNT           3u
 
 /* HAL dung dia chi da dich trai 1 bit */
 #define INA228_HAL_ADDR(a)        ((uint16_t)((a) << 1))

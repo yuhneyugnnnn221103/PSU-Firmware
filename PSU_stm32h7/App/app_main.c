@@ -17,11 +17,11 @@ extern I2C_HandleTypeDef hi2c1;
 #define CFG_VERIFY_MS		250u
 #define CONFIRM_RETRY_MS	1000u   /* ghi confirm loi thi thu lai moi chung nay */
 
-static ina228_dev_t g_devs[4] = {
+/* INA1..3 = DCM1..3 cua cum 1. INA4 tren mach bo qua hoan toan. */
+static ina228_dev_t g_devs[INA228_CH_COUNT] = {
 		{.addr7 = INA228_ADDR_CH1, .alert_port = DCM_CUR_ALRT1_GPIO_Port, .alert_pin = DCM_CUR_ALRT1_Pin },
 		{.addr7 = INA228_ADDR_CH2, .alert_port = DCM_CUR_ALRT2_GPIO_Port, .alert_pin = DCM_CUR_ALRT2_Pin },
 		{.addr7 = INA228_ADDR_CH3, .alert_port = DCM_CUR_ALRT3_GPIO_Port, .alert_pin = DCM_CUR_ALRT3_Pin },
-		{.addr7 = INA228_ADDR_CH4, .alert_port = DCM_CUR_ALRT4_GPIO_Port, .alert_pin = DCM_CUR_ALRT4_Pin },
 };
 
 static struct {
@@ -63,7 +63,7 @@ static void self_confirmed_task(uint32_t now)
 
 	/* Dieu kien "chay duoc" (xem self_test.h): cam bien song + safety da khoi dong,
 	 * lien tuc SELFTEST_WINDOW_MS. Khong chi doi thoi gian troi qua. */
-	selftest_in_t in = { 0u, Safety_State(), Comm_PcLinkAlive(now) };
+	selftest_in_t in = { 0u, Safety_State(0u), Comm_PcLinkAlive(now) };
 	for (uint8_t i = 0; i < INA228_CH_COUNT; i++) {
 		if (ina228_is_fresh(&g_devs[i], now) && g_devs[i].cfg_ok) in.ch_ok++;
 	}
@@ -71,7 +71,7 @@ static void self_confirmed_task(uint32_t now)
 
 	/* Xoa sector chan CPU (ke ca EXTI trip). Khi dau ra dang bat chi ghi neu
 	 * khong phai xoa; neu can xoa thi doi den khi nguon tat. */
-	if (Safety_PowerIsOn() && CfgStore_NeedsErase()) return;
+	if (Safety_AnyPowerOn() && CfgStore_NeedsErase()) return;
 
 	/* Ghi loi thi thu lai toi da 1 lan/giay (moi lan loi ton ban ghi flash) */
 	if ((uint32_t)(now - g_app.t_confirm_try) < CONFIRM_RETRY_MS) return;
@@ -138,13 +138,16 @@ void App_Loop(void)
 	if (ina228_bus_state() == INA228_BUS_IDLE) {
 		ina228_alert_process();
 
-		/* Cau hinh moi (04 04, chi nhan khi SAFE_OFF): nap lai thanh ghi cho INA */
+		/* Cau hinh moi (04 04, chi nhan khi moi cum OFF): nap lai thanh ghi cho INA */
 		if (PsuCfg_ConsumeDirty()) {
 			load_ina_regs(true);
 		}
 
-		/* Nguong DUOI cua INA (SUVL, BUVL) chi bat khi SAFE_ON */
-		ina228_set_under_armed(Safety_IsArmed());
+		/* Nguong DUOI cua INA (SUVL, BUVL) chi bat khi cum chua INA do dang SAFE_ON */
+		for (uint8_t i = 0; i < INA228_CH_COUNT; i++) {
+			const uint8_t c = Safety_ClusterOfIna(i);
+			ina228_set_under_armed(&g_devs[i], c != 0xFFu && Safety_IsArmed(c));
+		}
 		(void)ina228_limits_sync();
 
 		if (every(&g_app.t_cfg_verify, now, CFG_VERIFY_MS)) {
