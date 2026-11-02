@@ -17,11 +17,11 @@
 #define PSU_OFF_ADDR    4u
 #define PSU_OFF_PAYLOAD 5u
 
-/* CRC16-CCITT-FALSE (0x1021, init 0xFFFF).
- * 1 = tinh tu byte CMD (khop psu_messages.md va ACTL Tool hien tai).
- * 0 = tinh tu byte ADDR (bo qua CMD). Doi o DUY NHAT cho nay (cung phai doi ben PC). */
+/* CRC16-CCITT-FALSE (0x1021, init 0xFFFF), tinh tu byte ADDR den het payload (bo qua AB CD, CMD, CRC, E1 E2).
+ * 0 = tinh tu byte ADDR (mac dinh).
+ * 1 = tinh tu byte CMD (cach cu). Doi o DUY NHAT cho nay (cung phai doi ben PC). */
 #ifndef PSU_CRC_INCLUDE_CMD
-#define PSU_CRC_INCLUDE_CMD  1
+#define PSU_CRC_INCLUDE_CMD  0
 #endif
 #define PSU_CRC_START   (PSU_CRC_INCLUDE_CMD ? PSU_OFF_CMD : PSU_OFF_ADDR)
 
@@ -51,7 +51,7 @@
 #define PSU_LEN_MON_REQ      13u
 #define PSU_LEN_CFG_QUERY    13u
 #define PSU_LEN_CFG_WRITE    915u
-#define PSU_LEN_MONITOR      266u
+#define PSU_LEN_MONITOR      310u
 #define PSU_LEN_CFG_REPLY    915u
 #define PSU_LEN_FW_BEGIN     21u
 #define PSU_LEN_FW_DATA      269u

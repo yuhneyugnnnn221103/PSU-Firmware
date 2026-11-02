@@ -6,9 +6,9 @@ và các **mở rộng / khác biệt** so với file đó. Code: `shared_lib/ps
 
 ## 1. Quy ước
 - Khung: `AB CD | CMD (2 byte) | ADDR | dữ liệu | CRC16 (BE) | E1 E2`. Mọi số nhiều byte big-endian.
-- **CRC** CRC16-CCITT-FALSE. Hiện **tính từ byte CMD** (khớp ACTL Tool). Muốn đổi sang tính từ ADDR: đặt
-  `PSU_CRC_INCLUDE_CMD 0` trong `psu_frame.h` (một chỗ duy nhất, dùng chung app + bootloader; phải đổi cả phía PC).
-  Lưu ý khi bỏ CMD khỏi CRC: lỗi bit ở CMD không bị CRC bắt, chỉ bị chặn bởi bảng CMD hợp lệ + độ dài cố định.
+- **CRC** CRC16-CCITT-FALSE (poly `0x1021`, init `0xFFFF`), **tính từ byte ADDR đến hết payload** (bỏ qua `AB CD`, `CMD CMD`, CRC và `E1 E2`),
+  áp dụng cho mọi khung, ở cả app và bootloader. Quay lại cách cũ (tính từ CMD): đặt `PSU_CRC_INCLUDE_CMD 1` trong `psu_frame.h`
+  (một chỗ duy nhất; phải đổi cả phía PC). Lưu ý: lỗi bit ở CMD không bị CRC bắt, chỉ bị chặn bởi bảng CMD hợp lệ + độ dài cố định.
 - **Địa chỉ PSU** cố định trong code: `PSU_ADDR` (mặc định 1, đặt bằng `-DPSU_ADDR=n`). Khung sai địa chỉ bị bỏ, không phản hồi.
 - **Không tự phát**: firmware chỉ trả lời. Trả lời đi ra **đúng cổng đã nhận lệnh** (RS422 #1, RS422 #2, FT232 – dùng cổng nào cũng được).
 - Điều khiển (`01 01`) và ghi cấu hình (`04 04`) **không ACK**. ACK chỉ có trong nạp code.
@@ -17,7 +17,7 @@ và các **mở rộng / khác biệt** so với file đó. Code: `shared_lib/ps
 |---|---|---|---|
 | `01 01` | PC→PSU | 13 | Điều khiển: `[5]` Mask, `[6]` ClearTrip (0x01 = xoá) |
 | `02 02` | PC→PSU | 13 | Hỏi giám sát: `[5..8]` dự phòng → trả `81 81` |
-| `81 81` | PSU→PC | 266 | Giám sát |
+| `81 81` | PSU→PC | 310 | Giám sát |
 | `03 03` | PC→PSU | 13 | Hỏi cấu hình → trả `82 82` |
 | `82 82` | PSU→PC | 915 | Trả lời cấu hình (cùng bố cục `04 04`) |
 | `04 04` | PC→PSU | 915 | Ghi cấu hình (không ACK) |
@@ -38,7 +38,7 @@ và các **mở rộng / khác biệt** so với file đó. Code: `shared_lib/ps
   `TEMP_ADCn` ← thanh ghi DIETEMP thô 16 bit của INAn, đặt ở 2 byte thấp (byte cao = `00`), có dấu.
   Phía giao diện tự dịch phải/xử lý dấu. **VBUS không hiển thị.** DCM mất dữ liệu gửi `00`.
 - Cụm 2..4, cụm Supply, RTC: `00`. 10 byte **Trip**: xem mục 6.
-- **Vùng dự phòng 24 byte** (byte 239..262 theo cách đếm của tài liệu) là **mở rộng của firmware**:
+- **Vùng dự phòng 68 byte** (byte 239..306 theo cách đếm của tài liệu; 238..305 theo cách đếm từ 0) là **mở rộng của firmware**:
 
 | Offset | Nội dung |
 |---|---|
@@ -46,7 +46,7 @@ và các **mở rộng / khác biệt** so với file đó. Code: `shared_lib/ps
 | +3..+5 / +6..+8 / +9..+11 | cụm 2 / 3 / 4 (cùng 3 byte) |
 | +12 | slot firmware đang chạy (`A` / `B`) |
 | +13..+16 | version firmware đang chạy (u32 BE) |
-| +17..+23 | 0 |
+| +17..+67 | 0 (dự phòng) |
 
 ## 4. Điều khiển `01 01`
 Bit *c* của Mask điều khiển EN của cụm *c+1* (bit0 = cụm 1 = chân `PWR_EN`); bit của cụm chưa có phần cứng bỏ qua.
@@ -96,5 +96,5 @@ timeout phía PC nên ≥ 15 s) → `BEGIN` (size, CRC32, version; ACK ngay; ch�
   Stop-and-wait: PC phải chờ ACK rồi mới gửi khung kế.
 
 ## 8. Còn mở
-1. Bảng trip code chính thức (mục 6). 2. Đổi CRC sang "từ ADDR" (một macro). 3. Cụm 2..4, Supply, RTC: chưa có nguồn dữ liệu / phần cứng.
+1. Bảng trip code chính thức (mục 6). 2. (Đã xong) CRC tính từ ADDR, `81 81` dài 310 byte. 3. Cụm 2..4, Supply, RTC: chưa có nguồn dữ liệu / phần cứng.
 4. C3 (ngưỡng dưới INA khi OFF/ARMING): cần đo trên board. 5. Cổng nào là đường Gateway/dự phòng (hiện cả 3 cổng nhận mọi lệnh).

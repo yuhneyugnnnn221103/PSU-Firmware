@@ -6,18 +6,18 @@
 #include "psu_frame.h"
 #include "psu_topology.h"
 
-/* Ban tin giam sat 81 81 (266 byte). Phan cung hien tai: INA1..3 giam sat DCM1..3 cua CUM 1:
+/* Ban tin giam sat 81 81 (310 byte). Phan cung hien tai: INA1..3 giam sat DCM1..3 cua CUM 1:
  *   I_OUT_ADCn  (3 byte) <- thanh ghi CURRENT tho cua INAn (du lieu o bit 23..4, co dau)
  *   TEMP_ADCn   (3 byte) <- thanh ghi DIETEMP tho 16 bit cua INAn, dat o 2 byte thap (byte cao = 00), co dau
  * Phia giao dien tu dich phai / xu ly dau. VBUS khong hien thi. INA4 bo qua hoan toan.
  * Cum DCM 2..4, cum Supply, RTC: 00 (khong co cam bien). Kenh khong "tuoi" gui 00.
  *
- * Vung du phong 24 byte (byte 238..261, 0-based) la MO RONG CUA FIRMWARE:
+ * Vung du phong 68 byte (byte 238..305, 0-based) la MO RONG CUA FIRMWARE:
  *   +0..+2   cum 1: safe_state (SAFE_BOOT 0, OFF 1, ARMING 2, ON 3, TRIPPED 4), PWR_EN (1 = bat), so lan trip lien tiep
  *   +3..+5   cum 2 (cung 3 byte)       +6..+8 cum 3       +9..+11 cum 4
  *   +12      slot firmware dang chay ('A' / 'B' / '?')
  *   +13..+16 version firmware dang chay (u32 BE)
- *   +17..+23 = 0 */
+ *   +17..+67 = 0 (du phong) */
 
 #define PSU_MON_OFF_CLUSTER1  5u       /* byte dau cua cum 1 (0-based); moi DCM chiem 6 byte: I_OUT_ADC, TEMP_ADC */
 #define PSU_MON_OFF_RTC       221u
@@ -36,7 +36,7 @@ typedef struct {
     const uint8_t *trip;                       /* PSU_TRIP_BYTES byte */
 } psu_mon_t;
 
-/** Dung khung 266 byte vao f (da co CRC). */
+/** Dung khung 310 byte vao f (da co CRC). */
 void PsuMon_Build(uint8_t *f, const psu_mon_t *m);
 
 #endif /* PSU_MONITOR_H_ */

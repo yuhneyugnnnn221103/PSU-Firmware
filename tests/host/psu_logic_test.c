@@ -4,6 +4,7 @@
 #include "flash_sim.h"
 #include "cfg_store.h"
 #include "psu_frame.h"
+#include "crc16_ccitt.h"
 #include "psu_trip.h"
 #include "psu_monitor.h"
 #include "psu_cfg.h"
@@ -138,14 +139,18 @@ static void test_monitor(void)
     int zero=1; for (int i=23;i<221;i++) if (f[i]) zero=0; CHECK(zero, "phan con lai cua cum 1, cum 2..4 va Supply = 0 (byte 24..221)");
     zero=1; for (int i=221;i<228;i++) if (f[i]) zero=0; CHECK(zero, "RTC = 0");
     CHECK(memcmp(&f[228], trip, 10)==0, "10 trip byte o 229..238");
-    /* vung du phong 24 byte (byte 239..262): 4 x {safe_state, PWR_EN, trip count}, slot, version */
+    CHECK(PSU_LEN_MONITOR == 310u, "khung giam sat 310 byte");
+    /* vung du phong 68 byte (byte 239..306): 4 x {safe_state, PWR_EN, trip count}, slot, version, con lai = 0 */
     CHECK(f[238]==3 && f[239]==1 && f[240]==2, "cum 1: ON, PWR_EN, trip count 2");
     CHECK(f[241]==1 && f[242]==0 && f[243]==0, "cum 2: OFF");
     CHECK(f[244]==0 && f[245]==0 && f[246]==0, "cum 3: BOOT(0) mac dinh trong mau");
     CHECK(f[247]==4 && f[248]==0 && f[249]==7, "cum 4: TRIPPED, trip count 7");
     CHECK(f[250]=='B' && f[251]==0xAA && f[252]==0xBB && f[253]==0xCC && f[254]==0xDD, "slot, version BE");
-    zero=1; for (int i=255;i<262;i++) if (f[i]) zero=0; CHECK(zero, "phan con lai cua vung du phong = 0");
-    CHECK(f[262]*256+f[263] == Psu_Crc16(f,PSU_LEN_MONITOR) && f[264]==0xE1 && f[265]==0xE2, "CRC + duoi o cuoi");
+    zero=1; for (int i=255;i<306;i++) if (f[i]) zero=0; CHECK(zero, "phan con lai cua vung du phong (byte 255..305) = 0");
+    CHECK(f[306]*256+f[307] == Psu_Crc16(f,PSU_LEN_MONITOR) && f[308]==0xE1 && f[309]==0xE2, "CRC + duoi o cuoi");
+#if !PSU_CRC_INCLUDE_CMD
+    CHECK(f[306]*256+f[307] == Crc16_Compute(&f[4], 306-4), "CRC tinh tu ADDR (byte 4) den het payload");
+#endif
 }
 
 /* ---- anh cau hinh ---- */
