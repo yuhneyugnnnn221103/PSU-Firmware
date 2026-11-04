@@ -44,7 +44,8 @@ int main(void)
     CHECK(Psu_RxFrameLen(0x0101)==13 && Psu_RxFrameLen(0x0202)==13 && Psu_RxFrameLen(0x0303)==13, "13 byte");
     CHECK(Psu_RxFrameLen(0x0404)==915, "04 04 = 915");
     CHECK(Psu_RxFrameLen(0x9090)==21 && Psu_RxFrameLen(0x9191)==269, "BEGIN/DATA");
-    CHECK(Psu_RxFrameLen(0x9292)==9 && Psu_RxFrameLen(0x9393)==9 && Psu_RxFrameLen(0x9595)==9 && Psu_RxFrameLen(0x9696)==9 && Psu_RxFrameLen(0x9797)==9, "ctrl 9");
+    CHECK(Psu_RxFrameLen(0x9292)==9 && Psu_RxFrameLen(0x9393)==9 && Psu_RxFrameLen(0x9595)==9 && Psu_RxFrameLen(0x9696)==9 && Psu_RxFrameLen(0x9898)==9, "ctrl 9 (INFO/ERASE/ENTER_REC/END/COMMIT)");
+    CHECK(Psu_RxFrameLen(0x9797)==0, "97 97 (rollback cu) da bo");
     CHECK(Psu_RxFrameLen(0x8181)==0 && Psu_RxFrameLen(0x8282)==0 && Psu_RxFrameLen(0x9494)==0, "khung PSU->PC khong phai lenh nhan");
     CHECK(Psu_RxFrameLen(0x0102)==0 && Psu_RxFrameLen(0x0001)==0, "CMD 2 byte khac nhau khong hop le");
 

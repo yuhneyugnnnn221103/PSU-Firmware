@@ -65,26 +65,6 @@ static comm_port_t s_port[COMM_PORT_COUNT] = {
     [COMM_PORT_FT232  ] = { &huart4, NULL, 0, false, true, false, 0, 0 },
 };
 
-/* ACK tre (OTA: xoa xong / loi xoa): thu lai moi vong cho den khi gui duoc */
-static struct {
-    bool     pending;
-    uint8_t  port;
-    uint16_t cmd;
-    uint8_t  status;
-    uint32_t info;
-} s_late;
-static uint8_t s_erase_port;
-
-static uint32_t be32(const uint8_t *b)
-{
-    return ((uint32_t)b[0] << 24) | ((uint32_t)b[1] << 16) | ((uint32_t)b[2] << 8) | b[3];
-}
-
-static uint16_t be16(const uint8_t *b)
-{
-    return (uint16_t)(((uint16_t)b[0] << 8) | b[1]);
-}
-
 /* ==========================================================================
  * DOC CHAN LOI FT TU DCM
  * Binh thuong pull-up = 1, co loi = 0 -> dao lai de bit 1 nghia la CO LOI.
@@ -265,7 +245,6 @@ static bool send_cfg_reply(uint8_t port)
  * ========================================================================== */
 static void rx_exec(uint8_t p, const uint8_t *f)
 {
-    uint32_t info = 0u;
     uint8_t  st;
 
     switch (Psu_Cmd(f)) {
@@ -285,7 +264,7 @@ static void rx_exec(uint8_t p, const uint8_t *f)
     case PSU_CMD_CFG_WRITE:         /* khong ACK; PC doc lai de kiem tra */
         /* Doi thanh ghi INA/nguong khi nguon dang bat se doi thang do va ngat bao ve -> chi khi moi cum OFF.
          * Mask (byte 5..6) bo qua: luon ghi de toan bo. */
-        if (Safety_AllOff() && !FwUpdate_IsBusy()) {
+        if (Safety_AllOff()) {
             (void)PsuCfg_Store(&f[7]);
         }
         break;
@@ -294,44 +273,17 @@ static void rx_exec(uint8_t p, const uint8_t *f)
         (void)send_info(p);
         break;
 
-    case PSU_CMD_FW_ERASE:
-        st = FwUpdate_Erase(&info);
-        if (st != OTAP_ST_OK) {
-            (void)send_ack(p, PSU_CMD_FW_ERASE, st, info);
-        } else {
-            s_erase_port = p;       /* ACK gui sau khi xoa xong (Comm_FwPoll) */
-        }
+    case PSU_CMD_FW_ENTER_REC:      /* ACK roi reset ~50 ms sau; bootloader o lai recovery cho PC nap */
+        st = FwUpdate_RequestEnterRecovery();
+        (void)send_ack(p, PSU_CMD_FW_ENTER_REC, st, 0u);
         break;
 
+    case PSU_CMD_FW_ERASE:          /* App khong nap firmware: lenh nap chi hop le trong recovery */
     case PSU_CMD_FW_BEGIN:
-        st = FwUpdate_Begin(be32(&f[OTAP_BEGIN_OFF_SIZE]), be32(&f[OTAP_BEGIN_OFF_CRC32]),
-                            be32(&f[OTAP_BEGIN_OFF_VERSION]), &info);
-        (void)send_ack(p, PSU_CMD_FW_BEGIN, st, info);
-        break;
-
     case PSU_CMD_FW_DATA:
-        st = FwUpdate_Data(be16(&f[OTAP_DATA_OFF_SEQ]), be16(&f[OTAP_DATA_OFF_LEN]),
-                           &f[OTAP_DATA_OFF_PAYLOAD], &info);
-        (void)send_ack(p, PSU_CMD_FW_DATA, st, info);
-        break;
-
     case PSU_CMD_FW_END:
-        st = FwUpdate_End(&info);
-        (void)send_ack(p, PSU_CMD_FW_END, st, info);
-        break;
-
     case PSU_CMD_FW_COMMIT:
-        if (FwUpdate_CanCommit()) {
-            (void)send_ack(p, PSU_CMD_FW_COMMIT, OTAP_ST_OK, 0u);
-            FwUpdate_Commit();
-        } else {
-            (void)send_ack(p, PSU_CMD_FW_COMMIT, OTAP_ST_NO_COMMIT, 0u);
-        }
-        break;
-
-    case PSU_CMD_FW_ROLLBACK:
-        st = FwUpdate_RequestRollBack();
-        (void)send_ack(p, PSU_CMD_FW_ROLLBACK, st, 0u);       /* OK -> reset ~50 ms sau */
+        (void)send_ack(p, Psu_Cmd(f), OTAP_ST_NOT_RECOVERY, 0u);
         break;
 
     default:
@@ -431,7 +383,6 @@ void Comm_RxPoll(void)
 void Comm_Init(void)
 {
     memset(&s_stats, 0, sizeof(s_stats));
-    memset(&s_late, 0, sizeof(s_late));
 
     /* RE cua LTM2881 tich cuc muc thap. RS422 la full-duplex nen bo thu
      * khong bao gio can tat -> giu bat vinh vien. */
@@ -464,25 +415,4 @@ bool Comm_PcLinkAlive(uint32_t now_ms)
 {
     if (s_last_rx_ms == 0u) return false;      /* chua tung nhan lenh nao */
     return ((uint32_t)(now_ms - s_last_rx_ms) < 3000u);
-}
-
-/* ==========================================================================
- * OTA - ACK TRE (xoa xong / loi xoa)
- * ========================================================================== */
-void Comm_FwPoll(void)
-{
-    if (!s_late.pending) {
-        uint32_t err = 0u;
-        if (FwUpdate_TakeEraseDone()) {
-            s_late.pending = true; s_late.port = s_erase_port; s_late.cmd = PSU_CMD_FW_ERASE;
-            s_late.status = OTAP_ST_OK; s_late.info = 1u;
-        } else if (FwUpdate_TakeEraseError(&err)) {
-            s_late.pending = true; s_late.port = s_erase_port; s_late.cmd = PSU_CMD_FW_ERASE;
-            s_late.status = OTAP_ST_ERASE_FAIL; s_late.info = err;
-        }
-    }
-
-    if (s_late.pending && send_ack(s_late.port, s_late.cmd, s_late.status, s_late.info)) {
-        s_late.pending = false;
-    }
 }

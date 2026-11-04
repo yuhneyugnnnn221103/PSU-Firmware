@@ -62,12 +62,21 @@ static void reboot(void){ CfgStore_Init(); Boot_RecoveryResync(0); }
 int main(void)
 {
     memset(sim,0xFF,sizeof sim); CfgStore_Init();
-    build_image(OTA_SLOT_A);
+    build_image(OTA_SLOT_APP);
+
+    /* 0. Chua nhan khung hop le nao -> chua "engaged" (cua so cho khoi dong: het gio se nhay vao app) */
+    CHECK(!Boot_RecoveryEngaged(), "ban dau chua engaged");
+    { uint8_t f[PSU_LEN_FW_CTRL]; ntx=0;
+      Psu_FrameBegin(f,sizeof f,PSU_CMD_FW_INFO); f[PSU_OFF_ADDR]=PSU_ADDR+1; Psu_FrameSeal(f,sizeof f); feed_frame(f,sizeof f);
+      CHECK(!Boot_RecoveryEngaged() && ntx==0, "khung sai dia chi khong lam engaged");
+      Psu_FrameBegin(f,sizeof f,PSU_CMD_FW_INFO); Psu_FrameSeal(f,sizeof f); f[sizeof f-3]^=1; feed_frame(f,sizeof f);
+      CHECK(!Boot_RecoveryEngaged() && ntx==0, "khung sai CRC khong lam engaged"); }
 
     /* 1. INFO bao 'R'; ACK dung dinh dang (17 byte, AckCmd = 0x95, dia chi, CRC hop le) */
     send_ctrl(PSU_CMD_FW_INFO);
     CHECK(ntx==1 && tx[0][OTAP_ACK_OFF_SLOT]=='R' && ack_cmd()==0x95, "INFO phai tra 'R'");
     CHECK(Psu_FrameValid(tx[0], PSU_LEN_FW_ACK) && Psu_Cmd(tx[0])==PSU_CMD_FW_ACK && Psu_Addr(tx[0])==PSU_ADDR, "ACK la khung hop le");
+    CHECK(Boot_RecoveryEngaged(), "INFO hop le -> engaged (o lai recovery)");
 
     /* 2. Sai dia chi bi bo qua; sai CRC bi bo qua */
     { uint8_t f[PSU_LEN_FW_CTRL]; ntx=0; Psu_FrameBegin(f,sizeof f,PSU_CMD_FW_INFO); f[PSU_OFF_ADDR]=PSU_ADDR+1; Psu_FrameSeal(f,sizeof f); feed_frame(f,sizeof f);
@@ -94,22 +103,25 @@ int main(void)
     send_erase(); send_begin(sizeof img,img_crc^1u,1); CHECK(ack_status()==OTAP_ST_OK,"begin 2");
     for (uint16_t s=0;s<4;s++){ uint32_t off=s*256u,n=sizeof img-off; if(n>256)n=256; send_data(s,img+off,(uint16_t)n); }
     send_ctrl(PSU_CMD_FW_END); CHECK(ack_status()==OTAP_ST_CRC_FAIL,"crc sai");
-    CHECK(!Ota_ImageValid(OTA_SLOT_A),"khong duoc co anh hop le sau CRC sai");
+    CHECK(!Ota_ImageValid(OTA_SLOT_APP),"khong duoc co anh hop le sau CRC sai");
     send_begin(sizeof img,img_crc,1); CHECK(ack_status()==OTAP_ST_NOT_ERASED,"sau CRC sai phai ERASE lai");
 
     /* 6. Phien dung -> anh hop le + boot record + COMMIT reset */
     CHECK(full_session(),"phien day du");
-    CHECK(Ota_ImageValid(OTA_SLOT_A) && Ota_VectorOk(OTA_SLOT_A),"slot A hop le");
-    cfg_boot_payload_t bp; CHECK(CfgStore_ReadBoot(OTA_SLOT_A,&bp)&&bp.boot_count==0&&!bp.confirmed,"boot record");
+    CHECK(Ota_ImageValid(OTA_SLOT_APP) && Ota_VectorOk(OTA_SLOT_APP),"slot A hop le");
+    cfg_boot_payload_t bp; CHECK(CfgStore_ReadBoot(OTA_SLOT_APP,&bp)&&bp.boot_count==0&&!bp.confirmed,"boot record");
     CHECK(overwrite_errors==0,"khong duoc ghi de flash (%ld)",overwrite_errors);
 
-    /* 7. Slot B: anh link cho B */
-    build_image(OTA_SLOT_B); memset(sim,0xFF,sizeof sim); CfgStore_Init();
-    CHECK(full_session(),"phien slot B");
-    CHECK(Ota_ImageValid(OTA_SLOT_B) && !Ota_ImageValid(OTA_SLOT_A),"chi slot B hop le");
+    /* 7. Anh link sai vung (Reset_Handler ngoai vung app) bi tu choi ngay chunk 0; ENTER_REC o recovery chi ACK OK */
+    memset(sim,0xFF,sizeof sim); CfgStore_Init();
+    reset_called = false; send_ctrl(PSU_CMD_FW_ENTER_REC);
+    CHECK(ntx==1 && ack_status()==OTAP_ST_OK && ack_cmd()==0x98 && tx[0][OTAP_ACK_OFF_SLOT]=='R', "ENTER_REC o recovery: ACK OK, slot R");
+    CHECK(!reset_called, "ENTER_REC o recovery khong reset");
+    send_ctrl(0x9797);
+    CHECK(ntx==0, "97 97 (rollback cu) khong con duoc hieu");
 
     /* 8. Quet mat dien o MOI thao tac flash cua mot phien */
-    build_image(OTA_SLOT_A);
+    build_image(OTA_SLOT_APP);
     long total=0;
     for (long k=0;;k++) {
         memset(sim,0xFF,sizeof sim); CfgStore_Init(); ops=0; fail_at=k; bool crashed=false; bool ok=false;
@@ -117,11 +129,11 @@ int main(void)
         fail_at=-1;
         if (!crashed) { total=k; CHECK(ok,"phien khong crash phai OK"); break; }
         reboot();
-        if (Ota_ImageValid(OTA_SLOT_A)) {
-            CHECK(memcmp((const void*)(sim+(Ota_CodeBase(OTA_SLOT_A)-0x08000000u)),img,sizeof img)==0,"k=%ld anh hop le nhung sai noi dung",k);
+        if (Ota_ImageValid(OTA_SLOT_APP)) {
+            CHECK(memcmp((const void*)(sim+(Ota_CodeBase(OTA_SLOT_APP)-0x08000000u)),img,sizeof img)==0,"k=%ld anh hop le nhung sai noi dung",k);
         }
         CHECK(full_session(),"k=%ld khong the thu lai sau mat dien",k);
-        CHECK(Ota_ImageValid(OTA_SLOT_A)&&Ota_VectorOk(OTA_SLOT_A),"k=%ld sau retry slot A khong hop le",k);
+        CHECK(Ota_ImageValid(OTA_SLOT_APP)&&Ota_VectorOk(OTA_SLOT_APP),"k=%ld sau retry slot A khong hop le",k);
     }
     CHECK(overwrite_errors==0,"ghi de flash sau sweep (%ld)",overwrite_errors);
     printf("recovery sweep: %ld diem mat dien, fails=%d\n", total, fails);

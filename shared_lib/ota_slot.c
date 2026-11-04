@@ -3,8 +3,7 @@
 #include "flash_guard.h"
 
 const ota_slot_desc_t g_ota_slots[OTA_SLOT_COUNT] = {
-		[OTA_SLOT_A] = { OTA_SLOTA_BASE, OTA_SLOTA_SECTOR, 'A' },
-		[OTA_SLOT_B] = { OTA_SLOTB_BASE, OTA_SLOTB_SECTOR, 'B' },
+		[OTA_SLOT_APP] = { OTA_APP_BASE, OTA_APP_SECTOR, 'A' },     /* 'A' = app; 'R' = recovery (chi bao trong ACK) */
 };
 
 extern uint32_t g_pfnVectors;            /* startup_stm32h725xx.s */
@@ -12,7 +11,7 @@ extern uint32_t g_pfnVectors;            /* startup_stm32h725xx.s */
 ota_slot_t Ota_SlotRunning(void)
 {
 	const uint32_t vt = (uint32_t)&g_pfnVectors;
-	for (ota_slot_t s = OTA_SLOT_A; s < OTA_SLOT_COUNT; s++) {
+	for (ota_slot_t s = OTA_SLOT_APP; s < OTA_SLOT_COUNT; s++) {
 		if (vt == Ota_CodeBase(s)) {
 			return s;
 		}
@@ -23,7 +22,7 @@ ota_slot_t Ota_SlotRunning(void)
 
 ota_slot_t Ota_SlotFromTag(char tag)
 {
-	for (ota_slot_t s = OTA_SLOT_A; s < OTA_SLOT_COUNT; s++) {
+	for (ota_slot_t s = OTA_SLOT_APP; s < OTA_SLOT_COUNT; s++) {
 		if (g_ota_slots[s].tag == tag) {
 			return s;
 		}

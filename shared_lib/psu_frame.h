@@ -44,7 +44,7 @@
 #define PSU_CMD_FW_ACK       0x9494u   /* PSU -> PC */
 #define PSU_CMD_FW_INFO      0x9595u
 #define PSU_CMD_FW_ERASE     0x9696u   /* xoa slot dich, ACK khi xoa xong        */
-#define PSU_CMD_FW_ROLLBACK  0x9797u
+#define PSU_CMD_FW_ENTER_REC 0x9898u   /* app -> reset vao recovery (bootloader) de nap lai firmware */
 
 /* ---- Do dai khung (byte) ---- */
 #define PSU_LEN_CONTROL      13u
@@ -55,7 +55,7 @@
 #define PSU_LEN_CFG_REPLY    915u
 #define PSU_LEN_FW_BEGIN     21u
 #define PSU_LEN_FW_DATA      269u
-#define PSU_LEN_FW_CTRL      9u        /* END / COMMIT / INFO / ERASE / ROLLBACK */
+#define PSU_LEN_FW_CTRL      9u        /* END / COMMIT / INFO / ERASE / ENTER_REC */
 #define PSU_LEN_FW_ACK       17u
 #define PSU_LEN_MAX          PSU_LEN_CFG_WRITE
 

@@ -125,7 +125,7 @@ void App_Loop(void)
 	}
 
 	/* Quet 4 INA bang I2C DMA. Firmware KHONG tu phat telemetry: PC hoi (02 02) thi tra loi tu du lieu moi nhat. */
-	if (every(&g_app.t_scan, now, INA228_SCAN_PERIOD_MS) && !FwUpdate_IsBusy()) {
+	if (every(&g_app.t_scan, now, INA228_SCAN_PERIOD_MS)) {
 		(void)ina228_bus_start();
 	}
 
@@ -157,7 +157,6 @@ void App_Loop(void)
 
 	Safety_Task(now);
 	FwUpdate_Task(now);
-	Comm_FwPoll();
 	Led_Task(now);
 	self_confirmed_task(now);
 

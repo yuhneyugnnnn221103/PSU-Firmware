@@ -51,18 +51,30 @@ static void jump_to_slot(ota_slot_t sl)
     while (1) {}
 }
 
+/* Cua so cho khung tu PC ngay sau khi bat nguon, khi app khoi dong duoc: cho phep nap lai ca khi app
+ * "hop le nhung treo" (khong the nhan lenh ENTER_REC). Het gio ma khong co khung nao -> vao app. */
+#ifndef BOOT_RECOVERY_WINDOW_MS
+#define BOOT_RECOVERY_WINDOW_MS   300u
+#endif
+
 void Boot_Run(void)
 {
     CfgStore_Init();
 
-    /* Chi slot hop le, chua bi rollback va chua het luot moi duoc chon.
-     * Khong con muc "noi long": het luot = khong bao gio chon lai. */
+    /* App chi khoi dong khi: anh hop le, chua bi danh dau vao recovery, va chua het luot thu.
+     * Khong khoi dong duoc -> recovery vinh vien (khong tro ve). */
     ota_slot_t sl = Ota_SelectSlot(tick_wdg);
-    if (sl == OTA_SLOT_NONE) Boot_RecoveryRun();   /* khong tro ve */
+    if (sl == OTA_SLOT_NONE) {
+        Boot_RecoveryRun(0u);                       /* khong tro ve */
+        while (1) {}
+    }
 
-    /* Dem luot thu cho anh chua confirm (anh da confirm khong bi dem). Neu khong
-     * ghi duoc bo dem va slot kia da confirm thi khoi dong slot kia. */
-    sl = Ota_CommitTrial(sl);
+    /* App khoi dong duoc: nghe PC trong mot cua so ngan truoc khi nhay vao app. */
+    Boot_RecoveryRun(BOOT_RECOVERY_WINDOW_MS);
+
+    /* Dem luot thu cho anh chua confirm (anh da confirm khong bi dem). Neu khong ghi duoc bo dem van khoi dong
+     * (de thiet bi khong chet), nhung trial khong con bao ve. */
+    (void)Ota_CommitTrial(sl);
 
     IWDG_Refresh();
     jump_to_slot(sl);

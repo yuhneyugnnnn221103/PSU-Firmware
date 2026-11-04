@@ -268,7 +268,7 @@ static bool compact(void)
     s.committed = false;
 
     bool ok = true;
-    for (ota_slot_t sl = OTA_SLOT_A; ok && sl < OTA_SLOT_COUNT; sl++) {
+    for (ota_slot_t sl = OTA_SLOT_APP; ok && sl < OTA_SLOT_COUNT; sl++) {
         if (s.c.has_boot[sl]) ok = append(CFG_REC_TYPE_BOOT, &s.c.boot[sl], sizeof(s.c.boot[sl]));
     }
     if (ok && s.c.has_blob) ok = blob_append(s.c.blob_gen, s.c.blob, s.c.blob_len);

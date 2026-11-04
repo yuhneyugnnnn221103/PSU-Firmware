@@ -9,9 +9,11 @@
 #include "flash_guard.h"
 
 /* ==========================================================================
- * Cuu ho khi ca 2 slot deu hong. Trinh tu: INFO -> ERASE (xoa CA HAI slot, ACK khi
- * xong) -> BEGIN -> DATA... -> END -> COMMIT. Slot dich lay tu Reset_Handler o chunk 0.
- * Mat dien o bat ky buoc nao -> van khong co anh hop le -> lai vao cuu ho.
+ * Recovery: noi DUY NHAT nap/ghi firmware (app khong ghi flash app). Vao khi app khong khoi
+ * dong duoc, hoac khi PC chen vao cua so cho luc khoi dong (Boot_RecoveryRun).
+ * Trinh tu: INFO -> ERASE (xoa vung app, ACK khi xong) -> BEGIN -> DATA... -> END -> COMMIT.
+ * Vung dich kiem tra qua Reset_Handler o chunk 0.
+ * Mat dien o bat ky buoc nao -> khong co anh hop le -> lai vao recovery.
  * Anh chi hop le khi header (1 flash-word, ghi CUOI) + CRC32 khop.
  * Khung/CRC/dia chi: psu_frame.h. Dia chi khac PSU_ADDR bi bo qua.
  * ========================================================================== */
@@ -29,6 +31,9 @@ static struct {
 static uint8_t   rx_buf[REC_PORTS][PSU_LEN_FW_DATA];
 static psu_rx_t  rx[REC_PORTS];
 static bool      rx_ready;
+static bool      s_engaged;      /* da nhan >= 1 khung hop le gui toi PSU nay -> o lai recovery */
+
+bool Boot_RecoveryEngaged(void) { return s_engaged; }
 
 static void rx_init_once(void)
 {
@@ -73,7 +78,7 @@ static uint16_t be16(const uint8_t *b)
 
 static ota_slot_t slot_of_entry(uint32_t entry)
 {
-    for (ota_slot_t s = OTA_SLOT_A; s < OTA_SLOT_COUNT; s++) {
+    for (ota_slot_t s = OTA_SLOT_APP; s < OTA_SLOT_COUNT; s++) {
         const uint32_t lo = Ota_CodeBase(s);
         const uint32_t hi = g_ota_slots[s].base + OTA_SLOT_SIZE;
         if (entry >= lo && entry < hi) return s;
@@ -86,7 +91,7 @@ static void cmd_erase(uint8_t p)
     r.st = R_IDLE;
     r.slot = OTA_SLOT_NONE;
 
-    for (ota_slot_t s = OTA_SLOT_A; s < OTA_SLOT_COUNT; s++) {
+    for (ota_slot_t s = OTA_SLOT_APP; s < OTA_SLOT_COUNT; s++) {
         for (uint8_t k = 0; k < OTA_SLOT_SECTORS; k++) {
             const flash_op_result_t e = Flash_EraseSector((uint32_t)g_ota_slots[s].sector_first + k);
             if (!e.ok) {
@@ -257,14 +262,17 @@ static void exec(uint8_t p, const uint8_t *f, uint16_t n)
     if (!Psu_FrameValid(f, n))      return;
     if (Psu_Addr(f) != PSU_ADDR)    return;
 
+    s_engaged = true;
+
     switch (Psu_Cmd(f)) {
     case PSU_CMD_FW_ERASE:   cmd_erase(p);     break;
     case PSU_CMD_FW_BEGIN:   cmd_begin(p, f);  break;
     case PSU_CMD_FW_DATA:    cmd_data(p, f);   break;
     case PSU_CMD_FW_END:     cmd_end(p);       break;
     case PSU_CMD_FW_COMMIT:  cmd_commit(p);    break;
-    case PSU_CMD_FW_INFO:    send_ack(p, PSU_CMD_FW_INFO, OTAP_ST_OK, 0u); break;
-    default: break;          /* lenh khac (ke ca ROLLBACK, giam sat) khong co o recovery */
+    case PSU_CMD_FW_INFO:
+    case PSU_CMD_FW_ENTER_REC: send_ack(p, Psu_Cmd(f), OTAP_ST_OK, 0u); break;   /* dang o recovery roi */
+    default: break;          /* lenh khac (dieu khien, giam sat...) khong co o recovery */
     }
 }
 

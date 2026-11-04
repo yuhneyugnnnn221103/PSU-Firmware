@@ -2,7 +2,8 @@
 
 > **Đã lỗi thời ở phần truyền thông.** Sau đợt cải cách giao thức: firmware không tự phát telemetry, chỉ trả lời `02 02`/`03 03`;
 > khung CMD 2 byte; cấu hình 915 B lưu Flash; STM tự so ngưỡng + trip code; nạp code có bước `ERASE` riêng.
-> Xem `docs/PSU_PROTOCOL.md`. Các phần bootloader, safety, OTA cơ chế slot vẫn đúng.
+> **Lỗi thời.** Kiến trúc OTA nay là bootloader/recovery + MỘT app (không còn slot A/B, ROLLBACK, nạp trong app): xem `docs/OTA_LAYOUT.md`.
+> Giao thức/khung: `docs/PSU_PROTOCOL.md`. Mọi mô tả slot A/B, `FwUpdate` ERASING/RECEIVING, ROLLBACK bên dưới chỉ còn giá trị lịch sử.
 
 Tài liệu mô tả đúng những gì code đang làm (nhánh `claude/stoic-maxwell-314gkk`, sau commit "OTA nhóm D").
 Chưa có gì trong tài liệu này được kiểm chứng trên phần cứng; những chỗ "chưa đo" được ghi rõ.

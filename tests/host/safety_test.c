@@ -7,7 +7,6 @@
 #include "safety.h"
 #include "comm.h"
 #include "led.h"
-#include "fw_update.h"
 #include "psu_trip.h"
 
 GPIO_TypeDef fake_gpiob;
@@ -20,7 +19,6 @@ ina228_dev_t *ina228_get_dev(uint8_t i){ return i < INA228_CH_COUNT ? &devs[i] :
 static uint8_t dcm;
 uint8_t Comm_DcmFault(void){ return dcm; }
 bool Comm_PcLinkAlive(uint32_t n){ (void)n; return true; }
-fwu_state_t FwUpdate_State(void){ return FWU_IDLE; }
 static safe_state_t led_st; static fault_code_t led_code;
 void Led_SetStatus(safe_state_t st, fault_code_t c, uint8_t f){ led_st = st; led_code = c; (void)f; }
 

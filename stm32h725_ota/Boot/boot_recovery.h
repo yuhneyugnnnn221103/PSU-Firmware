@@ -8,10 +8,14 @@
  * 1 = RS422 #2 (USART1), 2 = FT232 (UART4). */
 #define REC_PORTS   3u
 
-/** Che do cuu ho: khi KHONG co anh hop le o ca 2 slot. Nhan firmware qua
- *  UART bang cung giao thuc FW_* voi App (INFO/BEGIN/DATA/END/COMMIT),
- *  ghi vao slot, reset khi COMMIT. KHONG BAO GIO tro ve. */
-void Boot_RecoveryRun(void);
+/** Recovery: nhan firmware qua UART (INFO/ERASE/BEGIN/DATA/END/COMMIT), ghi vung app, reset khi COMMIT.
+ *  @param window_ms 0  : o lai vinh vien (app khong khoi dong duoc) - KHONG BAO GIO tro ve.
+ *                   >0 : app khoi dong duoc; chi nghe `window_ms` ms sau khi bat nguon. Neu khong co khung hop le
+ *                        nao gui toi PSU nay thi tro ve (bootloader nhay vao app); co thi o lai vinh vien (de PC nap lai). */
+void Boot_RecoveryRun(uint32_t window_ms);
+
+/** Da nhan it nhat 1 khung hop le gui toi PSU nay? (test host / cua so cho) */
+bool Boot_RecoveryEngaged(void);
 
 /* --- Phan giao thuc (khong phu thuoc phan cung, test duoc tren host) --- */
 void Boot_RecoveryFeed(uint8_t port, uint8_t byte);

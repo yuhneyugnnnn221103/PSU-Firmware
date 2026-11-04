@@ -30,9 +30,6 @@ void Comm_RxPoll(void);
 /** Goi dinh ky (~10 ms): huy lan phat bi ket qua han. */
 void Comm_TxWatchdog(uint32_t now_ms);
 
-/** Goi moi vong lap: gui ACK tre (xoa xong / loi xoa) cho OTA. */
-void Comm_FwPoll(void);
-
 /** Doc 4 chan FT cua DCM (goi moi 10 ms), bo phieu 2/3. */
 void dcm_poll(void);
 

@@ -15,7 +15,7 @@ uint16_t Psu_RxFrameLen(uint16_t cmd)
     case PSU_CMD_FW_COMMIT:
     case PSU_CMD_FW_INFO:
     case PSU_CMD_FW_ERASE:
-    case PSU_CMD_FW_ROLLBACK: return PSU_LEN_FW_CTRL;
+    case PSU_CMD_FW_ENTER_REC: return PSU_LEN_FW_CTRL;
     default:                  return 0u;
     }
 }

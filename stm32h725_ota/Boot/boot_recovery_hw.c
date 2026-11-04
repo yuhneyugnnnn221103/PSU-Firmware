@@ -133,19 +133,24 @@ void RecHw_ResetSystem(void)
 #define REC_LED_PERIOD_MS    50u      /* nhay nhanh: bao hieu che do cuu ho */
 #define REC_RESYNC_MS        500u     /* im lang chung nay -> bo khung do */
 
-void Boot_RecoveryRun(void)
+void Boot_RecoveryRun(uint32_t window_ms)
 {
-    uint32_t t_led = HAL_GetTick();
+    const uint32_t t_start = HAL_GetTick();
+    uint32_t t_led = t_start;
     uint32_t t_rx[REC_PORTS];
 
     RecHw_Init();
-    for (uint8_t i = 0; i < REC_PORTS; i++) t_rx[i] = t_led;
+    for (uint8_t i = 0; i < REC_PORTS; i++) t_rx[i] = t_start;
 
     while (1) {
         IWDG_Refresh();
         uint32_t now = HAL_GetTick();
 
-        if ((uint32_t)(now - t_led) >= REC_LED_PERIOD_MS) {
+        /* Cua so cho: het gio ma chua co khung hop le nao -> de bootloader nhay vao app */
+        if (window_ms != 0u && !Boot_RecoveryEngaged() && (uint32_t)(now - t_start) >= window_ms) return;
+
+        /* LED nhay nhanh bao hieu recovery (khong nhay trong cua so cho de khong gay nhieu khi app binh thuong) */
+        if ((window_ms == 0u || Boot_RecoveryEngaged()) && (uint32_t)(now - t_led) >= REC_LED_PERIOD_MS) {
             HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
             t_led = now;
         }

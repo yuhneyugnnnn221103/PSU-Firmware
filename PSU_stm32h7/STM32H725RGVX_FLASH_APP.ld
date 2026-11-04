@@ -1,36 +1,30 @@
 /*
 ******************************************************************************
 **
-**  File        : STM32H725RGVX_FLASH_SLOTA.ld
+**  File        : STM32H725RGVX_FLASH_APP.ld
 **
-**  Abstract    : Linker script ung dung chinh, BUILD VARIANT SLOT A.
+**  Abstract    : Linker script ung dung chinh (app). Kien truc: bootloader/recovery + MOT app.
 **
-**                KHAC DUY NHAT SO VOI ban goc STM32H725RGVX_FLASH.ld:
-**                  FLASH ORIGIN = 0x08020400 (= OTA_SLOTA_BASE + 1024,
-**                                 chua header ota_image_header_t 1024 byte
-**                                 - xem ota_map.h. Header do FW_END trong
-**                                 fw_update.c ghi rieng, KHONG nam trong
-**                                 .bin build ra tu day)
-**                  FLASH LENGTH = 0x3FC00 (= 256K - 1024, ~255KB)
+**                KHAC SO VOI ban goc STM32H725RGVX_FLASH.ld:
+**                  FLASH ORIGIN = 0x08020400 (= OTA_APP_BASE + 1024: 1 KB dau cua vung app
+**                                 la header ota_image_header_t do recovery ghi khi END,
+**                                 KHONG nam trong .bin build ra tu day)
+**                  FLASH LENGTH = 0x9FC00 (= 5 sector x 128 KB - 1024 = 639 KB)
 **
 **  QUAN TRONG VE KICH THUOC HEADER: 1024 byte (KHONG PHAI 64) - day la
 **  YEU CAU BAT BUOC cua kien truc ARM (can le SCB->VTOR), khong phai lua
 **  chon tuy y. STM32H725 co 179 vector ngat (716 byte), can le toi thieu
-**  1024 byte. Neu FLASH ORIGIN o day khong khop CHINH XAC voi OTA_HEADER_
-**  SIZE trong ota_map.h, VTOR se bi phan cung "lam tron" sai vi tri ngay
+**  1024 byte. Neu FLASH ORIGIN o day khong khop CHINH XAC voi OTA_HEADER_SIZE
+**  (shared_lib/ota_image.h), VTOR se bi phan cung "lam tron" sai vi tri ngay
 **  khi App bat ngat -> HardFault/treo, loi CHI lo ra luc chay, khong bao
-**  gio bao luc build hay luc OTA (CRC32/ACK deu bao thanh cong binh thuong).
+**  gio bao luc build hay luc nap (CRC32/ACK deu bao thanh cong binh thuong).
 **
 **                Vi .isr_vector la section DAU TIEN trong SECTIONS (khong
-**                doi), no tu dong nam dung tai FLASH ORIGIN moi = dung vi
-**                tri VTOR can tro toi (slot_base + 1024). KHONG can sua gi
+**                doi), no tu dong nam dung tai FLASH ORIGIN = dung vi
+**                tri VTOR can tro toi (OTA_APP_BASE + 1024). KHONG can sua gi
 **                them trong SECTIONS.
 **
-**  QUAN TRONG: build nay PHAI di kem define -DOTA_MY_SLOT='A' (xem
-**              fw_update.h). Neu lech (vd dung linker script nay nhung
-**              define OTA_MY_SLOT='B'), fw_update.c se coi Slot A - noi
-**              CHINH ANH NAY dang chay - la "slot khong hoat dong" va ghi
-**              de len chinh no dang thuc thi. Kiem tra ky truoc khi build.
+**  Bo cuc Flash: shared_lib/ota_layout.h (sector 0 bootloader, 1..5 app, 6..7 cfg).
 **
 ** Copyright (c) 2026 STMicroelectronics.
 ****************************************************************************
@@ -50,7 +44,7 @@ MEMORY
 {
   ITCMRAM (xrw)    : ORIGIN = 0x00000000,   LENGTH = 64K
   DTCMRAM (xrw)    : ORIGIN = 0x20000000,   LENGTH = 128K
-  FLASH    (rx)    : ORIGIN = 0x08020400,   LENGTH = 0x3FC00   /* Slot A + header */
+  FLASH    (rx)    : ORIGIN = 0x08020400,   LENGTH = 0x9FC00   /* app (sector 1..5) tru header 1 KB */
   RAM_D1  (xrw)    : ORIGIN = 0x24000000,   LENGTH = 320K
   RAM_D2  (xrw)    : ORIGIN = 0x30000000,   LENGTH = 32K
   RAM_D3  (xrw)    : ORIGIN = 0x38000000,   LENGTH = 16K

@@ -6,7 +6,6 @@
  */
 
 #include <comm.h>
-#include <fw_update.h>
 #include <ina228_driver.h>
 #include <led.h>
 #include <safety.h>
@@ -471,8 +470,6 @@ bool Safety_RequestPower(uint8_t c, bool on)
     if (on && cl[c].state == SAFE_TRIPPED) {
         return false;                    /* PC phai gui ClearTrip truoc */
     }
-
-    if (on && FwUpdate_IsBusy()) return false;
 
     cl[c].pc_wants_on = on;
     return true;

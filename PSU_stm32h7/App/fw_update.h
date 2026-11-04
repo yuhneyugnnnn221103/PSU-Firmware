@@ -4,97 +4,26 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-typedef enum {
-    FWU_IDLE = 0,       /* khong co phien OTA nao dang chay        */
-    FWU_ERASING,        /* dang xoa sector, chia nho qua nhieu tick */
-    FWU_ERASED,         /* da xoa xong, cho FW_BEGIN                */
-    FWU_RECEIVING,      /* dang nhan FW_DATA                        */
-    FWU_VERIFIED        /* FW_END da xac nhan CRC dung, cho COMMIT  */
-} fwu_state_t;
+/* App KHONG nap firmware. Viec nap (ERASE/BEGIN/DATA/END/COMMIT) chi do bootloader/recovery lam; app chi:
+ *   - tra loi INFO (version, trang thai trial cua chinh minh);
+ *   - nhan ENTER_REC: danh dau "vao recovery" trong cfg roi reset (bootloader o lai recovery cho PC nap). */
 
 void FwUpdate_Init(void);
 
-/** @brief Goi moi vong main loop. Chia nho viec xoa sector qua nhieu tick
- *         (xem FWU_ERASING) de khong block Safety_Task qua lau 1 lan. */
+/** Goi moi vong main loop: thuc hien reset da hen sau ENTER_REC. */
 void FwUpdate_Task(uint32_t now_ms);
 
-/* --- Xu ly tung lenh, goi tu rx_exec() trong comm.c ---
- * Tra ve ma trang thai OTAP_ST_* (shared_lib/ota_proto.h) de comm.c
- * dong khung FW_ACK gui lai PC. out_info duoc dien tuy lenh (vd last_seq
- * cho FW_DATA) - xem ota_proto.h. */
-/** Buoc 1 (sau INFO): bat dau xoa slot dich. Tra ve OTAP_ST_OK neu da bat dau (ACK gui SAU khi xoa xong,
- *  xem FwUpdate_TakeEraseDone / TakeEraseError); ma khac -> tra loi ngay. */
-uint8_t FwUpdate_Erase(uint32_t *out_info);
+/** Yeu cau vao recovery.
+ *  @return OTAP_ST_OK (se reset ~50 ms sau, de ACK kip gui) | REFUSED (con cum khong OFF) |
+ *          WRONG_SLOT (khong biet dang chay vung app nao: link sai) | PROG_FAIL (khong ghi duoc cfg) */
+uint8_t FwUpdate_RequestEnterRecovery(void);
 
-/** Vua xoa xong chua bao? Lay va xoa co. */
-bool FwUpdate_TakeEraseDone(void);
-
-/** Buoc 2: khai bao size/crc/version. Chi hop le sau khi xoa xong (NOT_ERASED neu chua ERASE). */
-uint8_t FwUpdate_Begin(uint32_t total_size, uint32_t crc32_total,
-                       uint32_t version, uint32_t *out_info);
-uint8_t FwUpdate_Data(uint16_t seq, uint16_t chunk_len,
-                      const uint8_t *data, uint32_t *out_info);
-uint8_t FwUpdate_End(uint32_t *out_info);
-
-/** @brief Tra true neu da FWU_VERIFIED (FW_END thanh cong) VA duoc phep
- *         reset. KHONG tu reset trong ham nay - comm.c goi sau khi da
- *         gui xong FW_ACK, de PC chac chan nhan duoc ACK truoc khi mat
- *         ket noi do reset. */
-bool FwUpdate_CanCommit(void);
-
-/** @brief Thuc hien reset he thong. Goi SAU khi FW_ACK cho FW_COMMIT da
- *         duoc dua vao hang doi TX (khong nhat thiet da gui xong tren
- *         day - UART DMA se hoan tat truyen truoc khi HAL_NVIC_SystemReset
- *         thuc su cat nguon logic, nhung KHONG dam bao 100%; xem ghi chu
- *         trong fw_update.c ve do tre toi thieu truoc reset). */
-void FwUpdate_Commit(void);
-
-fwu_state_t FwUpdate_State(void);
-
-/** @brief Co phien OTA dang chay khong (ERASING/RECEIVING/VERIFIED)?
- *
- *  Dung de TAM DUNG cac luong phat khac trong main loop. Ly do ky thuat:
- *  FW_ACK dung chung buffer aux voi telemetry/STATUS qua aux_acquire(),
- *  ma ham do tu choi cap buffer neu BAT KY cong nao dang ban. Telemetry
- *  phat moi 60 ms len ca 3 cong (~5 ms/khung) -> cu 60 ms lai co cua so
- *  ~5 ms khien fw_send_ack() that bai IM LANG, PC khong nhan ACK, phai
- *  cho het timeout roi gui lai chunk. Voi hang tram chunk, va cham tich
- *  luy lai gay cham hoac hong ca phien.
- *
- *  KHONG dung de tat Safety_Task() - do la lop bao ve, phai luon chay. */
-static inline bool FwUpdate_IsBusy(void)
-{
-    const fwu_state_t st = FwUpdate_State();
-    return (st != FWU_IDLE);
-}
-
-/** @brief Lay (va XOA) thong tin loi xoa sector gan nhat.
- *  @param out_err  nhan ma loi HAL (HAL_FLASH_GetError()) de PC chan doan.
- *  @retval true neu vua co mot lan xoa THAT BAI chua duoc bao cao.
- *
- *  Ly do can ham nay: khi xoa loi, FwUpdate_Task() dua state ve FWU_IDLE.
- *  Comm_FwPoll() chi phat ACK khi thay chuyen ERASING -> RECEIVING, nen
- *  chuyen ERASING -> IDLE se KHONG sinh ACK nao - PC cho het timeout roi
- *  bao "thiet bi treo", trong khi thuc te thiet bi van chay binh thuong
- *  va chi im lang nuot loi. */
-bool FwUpdate_TakeEraseError(uint32_t *out_err);
-
-bool FwUpdate_TakeTimeout(void);
-
-/** @brief Version cua CHINH anh dang chay, doc tu header cua slot minh.
- *  @retval 0 neu header khong hop le (vd nap tay qua SWD ma quen header). */
+/** Version cua CHINH anh dang chay, doc tu header. 0 neu header khong hop le (vd nap tay qua SWD, khong header). */
 uint32_t FwUpdate_RunningVersion(void);
 
-/** Danh dau slot dang chay la hong va reset de bootloader chon slot kia.
- *  @return OTAP_ST_OK (se reset ~50 ms sau) | REFUSED (khong o SAFE_OFF) |
- *          BUSY (dang OTA) | WRONG_SLOT (khong biet dang chay slot nao) |
- *          NO_TARGET (slot kia khong the khoi dong) | PROG_FAIL (khong ghi duoc cfg) */
-uint8_t FwUpdate_RequestRollBack(void);
-
-/** Trang thai trial cua slot dang chay, de bao trong FW_INFO:
- *  bit7 = da confirm, bit6..0 = boot_count (127 = bi rollback / lon hon). 0 neu khong co ban ghi. */
+/** Trang thai trial de bao trong INFO: bit7 = da confirm, bit6..0 = boot_count (127 = bi danh dau/lon hon). 0 neu khong co ban ghi. */
 uint8_t FwUpdate_RunningState(void);
 
-char FwUpdate_RunningSlot(void);   /* 'A'/'B', '?' neu link sai */
+char FwUpdate_RunningSlot(void);   /* 'A' (app), '?' neu link sai */
 
 #endif /* FW_UPDATE_H_ */

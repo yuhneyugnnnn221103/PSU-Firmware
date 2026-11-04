@@ -21,9 +21,9 @@ và các **mở rộng / khác biệt** so với file đó. Code: `shared_lib/ps
 | `03 03` | PC→PSU | 13 | Hỏi cấu hình → trả `82 82` |
 | `82 82` | PSU→PC | 915 | Trả lời cấu hình (cùng bố cục `04 04`) |
 | `04 04` | PC→PSU | 915 | Ghi cấu hình (không ACK) |
-| `90 90`..`93 93`, `95 95` | PC→PSU | 21 / 269 / 9 / 9 / 9 | BEGIN / DATA / END / COMMIT / INFO |
-| `96 96` | PC→PSU | 9 | **ERASE** (mới) |
-| `97 97` | PC→PSU | 9 | **ROLLBACK** (mới) |
+| `95 95` | PC→PSU | 9 | INFO (app và recovery đều trả lời) |
+| `98 98` | PC→PSU | 9 | **ENTER_REC**: app ghi cờ rồi reset vào recovery (chỉ khi mọi cụm OFF); recovery trả ACK OK |
+| `96 96`, `90 90`..`93 93` | PC→PSU | 9 / 21 / 269 / 9 / 9 | ERASE / BEGIN / DATA / END / COMMIT: **chỉ ở recovery** (app trả ACK `NOT_RECOVERY`) |
 | `94 94` | PSU→PC | 17 | ACK |
 
 ## 2. Kiến trúc: 4 cụm DCM, mỗi cụm một máy trạng thái
@@ -44,7 +44,7 @@ và các **mở rộng / khác biệt** so với file đó. Code: `shared_lib/ps
 |---|---|
 | +0..+2 | cụm 1: `safe_state` (0 BOOT, 1 OFF, 2 ARMING, 3 ON, 4 TRIPPED), trạng thái PWR_EN (1 bật / 0 tắt), số lần trip liên tiếp |
 | +3..+5 / +6..+8 / +9..+11 | cụm 2 / 3 / 4 (cùng 3 byte) |
-| +12 | slot firmware đang chạy (`A` / `B`) |
+| +12 | slot firmware đang chạy (`A` = app) |
 | +13..+16 | version firmware đang chạy (u32 BE) |
 | +17..+67 | 0 (dự phòng) |
 
@@ -83,17 +83,18 @@ Lệnh bật bị từ chối (cụm đang TRIPPED hoặc đang nạp code) → 
 | TRIP6 | bit0 mất liên lạc I²C; bit1 cắt do ALERT nhưng không xác nhận được nguyên nhân; bit3 cấu hình INA không hợp lệ |
 | TRIP7..10 | 0 |
 
-## 7. Nạp code
-Trình tự: `INFO` (kiểm kết nối, slot, version) → `ERASE` (xoá slot đích; **một ACK duy nhất khi xoá xong**, `Info = 1`;
-timeout phía PC nên ≥ 15 s) → `BEGIN` (size, CRC32, version; ACK ngay; chỉ sau ERASE, nếu không `NOT_ERASED`) →
-`DATA` (256 B/gói, gói cuối đệm `FF`, khung luôn 269 B) → `END` → `COMMIT`.
-- ACK `94 94` (17 byte): `[5]` AckCmd (1 byte, ví dụ `96` cho ERASE), `[6]` status, `[7..10]` info, `[11]` slot (`A`/`B`; **`R` ở recovery**),
-  `[12]` trạng thái trial chỉ có ở trả lời INFO (bit7 confirmed, bit6..0 boot_count).
-- Status: 0 OK, 1 Refused (có cụm chưa OFF), 2 BadSize, 3 BadSeq, 4 CrcFail, 5 Busy, 6 NoCommitPending, 7 EraseFail, 8 WrongSlot,
-  **9 ProgFail** (lỗi ghi flash, info = mã HAL/địa chỉ), **10 NoTarget** (ROLLBACK: slot kia không khởi động được), **11 NotErased** (BEGIN khi chưa ERASE).
-- `ROLLBACK (97 97)`: đánh dấu slot đang chạy hỏng và reset, có ACK; chỉ khi mọi cụm OFF và slot kia khởi động được.
-- Bootloader (recovery, khi cả hai slot hỏng) nói cùng giao thức: `INFO`, `ERASE` (xoá cả hai slot), `BEGIN`, `DATA`, `END`, `COMMIT`; slot trả lời `R`.
-  Stop-and-wait: PC phải chờ ACK rồi mới gửi khung kế.
+## 7. Nạp code (chỉ trong recovery)
+App **không** nạp firmware. Trình tự từ PC: `INFO` (`95 95`; app trả slot `A` + version) → `ENTER_REC` (`98 98`; app ACK rồi reset ~50 ms sau)
+→ hỏi `INFO` lặp lại đến khi slot trả `R` (recovery) → `ERASE` (xoá vùng app 5 sector; **một ACK duy nhất khi xoá xong**, `Info = 1`;
+timeout phía PC ≥ 30 s, chưa đo) → `BEGIN` (size ≤ 639 KB, CRC32, version; ACK ngay; chỉ sau ERASE, nếu không `NOT_ERASED`) →
+`DATA` (256 B/gói, gói cuối đệm `FF`, khung luôn 269 B) → `END` → `COMMIT` (ACK rồi reset, bootloader chạy app mới).
+Nếu bootloader chưa có app hợp lệ (board mới / app hỏng) thì nó đã ở recovery sẵn: bỏ qua `ENTER_REC`.
+Nếu app treo, cấp nguồn lại và gửi `INFO` trong 300 ms đầu: bootloader ở lại recovery.
+- ACK `94 94` (17 byte): `[5]` AckCmd (1 byte, ví dụ `96` cho ERASE), `[6]` status, `[7..10]` info, `[11]` slot (`A` = app; **`R` = recovery**),
+  `[12]` trạng thái trial chỉ có ở trả lời INFO của app (bit7 confirmed, bit6..0 boot_count).
+- Status: 0 OK, 1 Refused (có cụm chưa OFF), 2 BadSize, 3 BadSeq, 4 CrcFail, 5 Busy, 6 NoCommitPending, 7 EraseFail, 8 WrongSlot (Reset_Handler ngoài vùng app),
+  **9 ProgFail** (lỗi ghi flash, info = mã HAL/địa chỉ), 10 (dự phòng), **11 NotErased** (BEGIN khi chưa ERASE), **12 NotRecovery** (app nhận lệnh nạp).
+- Stop-and-wait: PC phải chờ ACK rồi mới gửi khung kế. Muốn về bản cũ: nạp lại file `.bin` cũ (không còn ROLLBACK, không còn slot B).
 
 ## 8. Còn mở
 1. Bảng trip code chính thức (mục 6). 2. (Đã xong) CRC tính từ ADDR, `81 81` dài 310 byte. 3. Cụm 2..4, Supply, RTC: chưa có nguồn dữ liệu / phần cứng.
