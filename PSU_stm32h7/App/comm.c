@@ -62,7 +62,7 @@ typedef struct {
 static comm_port_t s_port[COMM_PORT_COUNT] = {
     [COMM_PORT_RS422_1] = { &huart5, RS422_DE1_GPIO_Port, RS422_DE1_Pin, true,  false, false, 0, 0 },
     [COMM_PORT_RS422_2] = { &huart1, RS422_DE2_GPIO_Port, RS422_DE2_Pin, true,  false, false, 0, 0 },
-    [COMM_PORT_FT232  ] = { &huart4, NULL, 0, false, true, false, 0, 0 },
+    [COMM_PORT_FT232  ] = { &huart4, NULL, 0, false, COMM_FT232_CHECK_RTS, false, 0, 0 },
 };
 
 /* ==========================================================================

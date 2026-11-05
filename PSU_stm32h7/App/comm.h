@@ -21,6 +21,13 @@
 
 #define COMM_BAUD           115200u /* phai khop MX_*_UART_Init */
 
+/* 1 = chi tra loi qua FT232 khi chan RTS# (PA3) o muc thap (PC san sang). 0 (mac dinh) = luon tra loi.
+ * Firmware chi tra loi khi duoc hoi (hoi -> doi), nen khong can dieu khien luong; de 1 thi PC khong bat RTS
+ * se khong nhan duoc phan hoi nao va firmware chi dem tx_skipped, khong bao loi. */
+#ifndef COMM_FT232_CHECK_RTS
+#define COMM_FT232_CHECK_RTS  0
+#endif
+
 /** Khoi tao cong, bat DMA RX vong. Goi sau ina228_init_all(). */
 void Comm_Init(void);
 
