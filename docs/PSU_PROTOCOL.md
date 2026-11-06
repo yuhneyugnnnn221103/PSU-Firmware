@@ -4,6 +4,8 @@ Nguồn chuẩn của khung và trường: `psu_messages.md` (ACTL Tool). Tài l
 và các **mở rộng / khác biệt** so với file đó. Code: `shared_lib/psu_frame.[ch]`, `shared_lib/ota_proto.h`,
 `PSU_stm32h7/App/{comm,psu_cfg,psu_trip,psu_monitor}.[ch]`, `stm32h725_ota/Boot/boot_recovery.c`.
 
+> **Bảng byte chi tiết theo từng nhóm bản tin (Excel):** `docs/PSU_Message_Spec.xlsx` (sinh bằng `python tools/gen_message_spec.py`, khung mẫu: `docs/PSU_FRAME_EXAMPLES.md`).
+
 ## 1. Quy ước
 - Khung: `AB CD | CMD (2 byte) | ADDR | dữ liệu | CRC16 (BE) | E1 E2`. Mọi số nhiều byte big-endian.
 - **CRC** CRC16-CCITT-FALSE (poly `0x1021`, init `0xFFFF`), **tính từ byte ADDR đến hết payload** (bỏ qua `AB CD`, `CMD CMD`, CRC và `E1 E2`),
