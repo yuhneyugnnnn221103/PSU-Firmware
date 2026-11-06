@@ -41,6 +41,11 @@ uint8_t FwUpdate_RunningState(void)
     return (uint8_t)((bp.confirmed ? OTAP_STATE_CONFIRMED : 0u) | (uint8_t)bp.boot_count);
 }
 
+void FwUpdate_VersionStr(char out[32])
+{
+    (void)Ota_ReadVersionStr(my_slot(), out);
+}
+
 char FwUpdate_RunningSlot(void)
 {
     const ota_slot_t sl = my_slot();

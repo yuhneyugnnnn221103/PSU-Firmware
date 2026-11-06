@@ -63,13 +63,14 @@ int main(void)
     CHECK(led_st==SAFE_TRIPPED && led_code==FCODE_OVERCUR, "LED bao TRIPPED");
     run(5000); clear_diag(); run(5);
     CHECK(Safety_State(0)==SAFE_TRIPPED, "TRIPPED giu cho den ClearTrip");
-    Safety_Control(0x01, false);
+    CHECK(!Safety_Control(0x01, false), "Safety_Control tra false khi lenh bat bi tu choi (TRIPPED)");
     CHECK(Safety_State(0)==SAFE_TRIPPED, "dang TRIPPED: lenh bat bi tu choi");
-    Safety_Control(0x01, true);                             /* Clear + bat trong cung khung */
+    CHECK(Safety_Control(0x00, false) && Safety_State(0)==SAFE_TRIPPED, "yeu cau tat luon duoc chap nhan, khong thoat TRIPPED");
+    CHECK(!Safety_Control(0x01, true), "clear + bat cung khung: tra false (lenh bat bi bo qua)"); /* Clear + bat trong cung khung */
     CHECK(Safety_State(0)==SAFE_OFF && !PsuTrip_Any(), "ClearTrip: xoa trip code, ve OFF");
     run(SAFE_OFF_MIN_MS + 50);
     CHECK(Safety_State(0)==SAFE_OFF && !pwr_pin, "lenh bat cung khung voi ClearTrip bi bo qua");
-    Safety_Control(0x01, false); run(SAFE_OFF_MIN_MS + 5); run(SAFE_ARM_MS + 5);
+    CHECK(Safety_Control(0x01, false), "bat khi khong TRIPPED: tra true"); run(SAFE_OFF_MIN_MS + 5); run(SAFE_ARM_MS + 5);
     CHECK(Safety_State(0)==SAFE_ON, "bat lai o khung sau");
     Safety_Control(0x01, true); run(5);
     CHECK(Safety_State(0)==SAFE_ON && pwr_pin, "ClearTrip khi dang ON khong tat nguon");

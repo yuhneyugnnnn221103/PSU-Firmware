@@ -45,6 +45,9 @@
 #define PSU_CMD_FW_INFO      0x9595u
 #define PSU_CMD_FW_ERASE     0x9696u   /* xoa slot dich, ACK khi xoa xong        */
 #define PSU_CMD_FW_ENTER_REC 0x9898u   /* app -> reset vao recovery (bootloader) de nap lai firmware */
+#define PSU_CMD_FW_GET_VERSION 0x9999u /* PC -> PSU : hoi chuoi version (app va recovery)        */
+#define PSU_CMD_FW_SET_VERSION 0x9A9Au /* PC -> PSU : dat chuoi version (chi recovery, truoc END) */
+#define PSU_CMD_FW_VERSION   0xA9A9u   /* PSU -> PC : tra loi GET_VERSION                         */
 
 /* ---- Do dai khung (byte) ---- */
 #define PSU_LEN_CONTROL      13u
@@ -55,8 +58,9 @@
 #define PSU_LEN_CFG_REPLY    915u
 #define PSU_LEN_FW_BEGIN     21u
 #define PSU_LEN_FW_DATA      269u
-#define PSU_LEN_FW_CTRL      9u        /* END / COMMIT / INFO / ERASE / ENTER_REC */
+#define PSU_LEN_FW_CTRL      9u        /* END / COMMIT / INFO / ERASE / ENTER_REC / GET_VERSION */
 #define PSU_LEN_FW_ACK       17u
+#define PSU_LEN_VERSION      41u       /* SET_VERSION va tra loi: 32 byte ASCII */
 #define PSU_LEN_MAX          PSU_LEN_CFG_WRITE
 
 /** Do dai khung PC -> PSU theo CMD; 0 neu khong phai lenh PSU nhan. */

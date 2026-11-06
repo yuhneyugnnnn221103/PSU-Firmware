@@ -118,7 +118,9 @@ void Safety_ClearFault(void);
 /** @brief Lenh dieu khien 01 01. Bit c cua mask = bat/tat cum c (cum chua co phan cung: bo qua). Moi lenh khong
  *         clear ghi de trang thai bat/tat. clear = ClearTrip: cum vua duoc xoa khoi TRIPPED bo qua lenh bat trong
  *         CUNG khung (PC gui lenh bat o khung sau). */
-void Safety_Control(uint8_t mask, bool clear);
+bool Safety_Control(uint8_t mask, bool clear);
+/*        @return true neu moi yeu cau BAT duoc chap nhan; false neu co cum bi tu choi (dang TRIPPED, hoac vua duoc
+ *                clear trong cung khung). Yeu cau tat luon duoc chap nhan; cum chua co phan cung bi bo qua (khong tinh). */
 
 /** @brief Cat moi chan EN, KHONG phu thuoc trang thai/HAL. Dung trong fault handler. */
 void Safety_ForceOff(void);

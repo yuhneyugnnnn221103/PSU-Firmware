@@ -31,5 +31,16 @@ void PsuMon_Build(uint8_t *f, const psu_mon_t *m)
     x[13] = (uint8_t)(m->version >> 24); x[14] = (uint8_t)(m->version >> 16);
     x[15] = (uint8_t)(m->version >> 8);  x[16] = (uint8_t)m->version;
 
+    x[17] = m->last_cmd;
+    x[18] = m->last_result;
+    x[19] = (uint8_t)(m->last_count >> 8); x[20] = (uint8_t)m->last_count;
+    for (uint8_t i = 0; i < PSU_DIAG_COUNT; i++) {
+        x[21u + 2u * i]      = (uint8_t)(m->diag[i] >> 8);
+        x[21u + 2u * i + 1u] = (uint8_t)m->diag[i];
+    }
+    x[39] = (uint8_t)(m->uptime_s >> 24); x[40] = (uint8_t)(m->uptime_s >> 16);
+    x[41] = (uint8_t)(m->uptime_s >> 8);  x[42] = (uint8_t)m->uptime_s;
+    x[43] = (uint8_t)PSU_PROTO_REV;
+
     Psu_FrameSeal(f, PSU_LEN_MONITOR);
 }

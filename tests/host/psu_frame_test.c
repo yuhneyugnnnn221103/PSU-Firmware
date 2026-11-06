@@ -46,6 +46,8 @@ int main(void)
     CHECK(Psu_RxFrameLen(0x9090)==21 && Psu_RxFrameLen(0x9191)==269, "BEGIN/DATA");
     CHECK(Psu_RxFrameLen(0x9292)==9 && Psu_RxFrameLen(0x9393)==9 && Psu_RxFrameLen(0x9595)==9 && Psu_RxFrameLen(0x9696)==9 && Psu_RxFrameLen(0x9898)==9, "ctrl 9 (INFO/ERASE/ENTER_REC/END/COMMIT)");
     CHECK(Psu_RxFrameLen(0x9797)==0, "97 97 (rollback cu) da bo");
+    CHECK(Psu_RxFrameLen(0x9999)==9 && Psu_RxFrameLen(0x9A9A)==41, "GET_VERSION 9 byte, SET_VERSION 41 byte");
+    CHECK(Psu_RxFrameLen(0xA9A9)==0, "A9 A9 la khung tra loi, khong phai lenh nhan");
     CHECK(Psu_RxFrameLen(0x8181)==0 && Psu_RxFrameLen(0x8282)==0 && Psu_RxFrameLen(0x9494)==0, "khung PSU->PC khong phai lenh nhan");
     CHECK(Psu_RxFrameLen(0x0102)==0 && Psu_RxFrameLen(0x0001)==0, "CMD 2 byte khac nhau khong hop le");
 

@@ -53,3 +53,4 @@ tests/host/safety_test
 tests/host/self_test_test
 tests/host/psu_frame_test
 tests/host/psu_logic_test
+tests/host/gen_examples

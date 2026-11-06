@@ -36,6 +36,20 @@ test: cfg_store_test recovery_test select_test safety_test self_test_test psu_fr
 	./psu_frame_test
 	./psu_logic_test
 
+# Kiem tra cu phap cac file App voi HAL gia (inc_hal): khong thay cho build ARM that
+syntax:
+	for f in comm fw_update safety psu_monitor psu_cfg app_main; do \
+	  $(CC) -std=gnu11 -fsyntax-only -Wall -Wno-unused-function -Wno-int-to-pointer-cast -Iinc_hal \
+	    -I../../PSU_stm32h7/Core/Inc -I$(APPSRC) -I../../PSU_stm32h7/BSP -I$(SH) $(APPSRC)/$$f.c || exit 1; done
+	@echo "syntax ok"
+
+gen_examples: gen_examples.c $(APPSRC)/psu_monitor.c $(APPSRC)/psu_trip.c $(SH)/psu_frame.c $(SH)/crc16_ccitt.c $(SH)/crc32_sw.c
+	$(CC) $(CFLAGS) -I$(APPSRC) -I../../PSU_stm32h7/BSP $^ -o $@
+
+# Sinh lai docs/PSU_FRAME_EXAMPLES.md tu code firmware
+examples: gen_examples
+	./gen_examples > ../../docs/PSU_FRAME_EXAMPLES.md
+
 clean:
-	rm -f cfg_store_test recovery_test select_test safety_test self_test_test psu_frame_test psu_logic_test
-.PHONY: test clean
+	rm -f cfg_store_test recovery_test select_test safety_test self_test_test psu_frame_test psu_logic_test gen_examples
+.PHONY: test clean syntax examples

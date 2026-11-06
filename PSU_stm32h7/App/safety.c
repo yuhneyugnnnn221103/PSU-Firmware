@@ -492,9 +492,10 @@ void Safety_ClearFault(void)
     }
 }
 
-void Safety_Control(uint8_t mask, bool clear)
+bool Safety_Control(uint8_t mask, bool clear)
 {
     bool skip[PSU_CLUSTERS];
+    bool all_ok = true;
 
     for (uint8_t c = 0; c < PSU_CLUSTERS; c++) skip[c] = false;
 
@@ -504,9 +505,15 @@ void Safety_Control(uint8_t mask, bool clear)
     }
 
     for (uint8_t c = 0; c < PSU_CLUSTERS; c++) {
-        if (skip[c] || !hw_present(c)) continue;           /* lenh bat trong cung khung voi clear bi bo qua */
-        (void)Safety_RequestPower(c, (mask & (1u << c)) != 0u);
+        if (!hw_present(c)) continue;
+        const bool want_on = (mask & (1u << c)) != 0u;
+        if (skip[c]) {                                      /* lenh bat trong cung khung voi clear bi bo qua */
+            if (want_on) all_ok = false;
+            continue;
+        }
+        if (!Safety_RequestPower(c, want_on) && want_on) all_ok = false;
     }
+    return all_ok;
 }
 
 bool Safety_IsArmed(uint8_t c)

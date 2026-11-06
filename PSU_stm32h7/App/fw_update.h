@@ -24,6 +24,9 @@ uint32_t FwUpdate_RunningVersion(void);
 /** Trang thai trial de bao trong INFO: bit7 = da confirm, bit6..0 = boot_count (127 = bi danh dau/lon hon). 0 neu khong co ban ghi. */
 uint8_t FwUpdate_RunningState(void);
 
+/** Chuoi version (32 byte ASCII, dem 00) trong header anh dang chay; rong neu khong co. */
+void FwUpdate_VersionStr(char out[32]);
+
 char FwUpdate_RunningSlot(void);   /* 'A' (app), '?' neu link sai */
 
 #endif /* FW_UPDATE_H_ */

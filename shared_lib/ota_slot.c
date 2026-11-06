@@ -104,3 +104,28 @@ bool Ota_ReadHeader(ota_slot_t s, ota_image_header_t *out)
     FlashGuard_CopyWords(out, lo, sizeof(*out));
     return FlashGuard_End();
 }
+
+void Ota_VersionSanitize(char dst[OTA_VERSION_STR_LEN], const uint8_t src[OTA_VERSION_STR_LEN])
+{
+    uint32_t i = 0;
+    for (; i < OTA_VERSION_STR_LEN && src[i] >= 0x20u && src[i] <= 0x7Eu; i++) dst[i] = (char)src[i];
+    for (; i < OTA_VERSION_STR_LEN; i++) dst[i] = 0;
+}
+
+bool Ota_ReadVersionStr(ota_slot_t s, char out[OTA_VERSION_STR_LEN])
+{
+    uint8_t zero[OTA_VERSION_STR_LEN] = {0};
+    Ota_VersionSanitize(out, zero);
+    if (!Ota_SlotValid(s)) return false;
+
+    /* 5 word dau (magic..install_seq = 20 byte) + chuoi 32 byte = 52 byte -> doc 64 byte */
+    uint32_t w[16];
+    const uint32_t lo = g_ota_slots[s].base;
+    FlashGuard_Begin(lo, lo + OTA_SLOT_SIZE);
+    FlashGuard_CopyWords(w, lo, sizeof(w));
+    if (!FlashGuard_End()) return false;
+
+    if (w[0] != OTA_IMG_MAGIC) return false;
+    Ota_VersionSanitize(out, (const uint8_t *)&w[5]);
+    return true;
+}

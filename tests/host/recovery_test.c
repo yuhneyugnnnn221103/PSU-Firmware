@@ -12,9 +12,12 @@
 
 /* ---- phan cung gia ---- */
 static uint8_t  tx[8][PSU_LEN_FW_ACK]; static int ntx; static bool reset_called;
+static uint8_t  ver_reply[PSU_LEN_VERSION]; static int nver;
 void RecHw_Init(void) {}
 bool RecHw_RxByte(uint8_t p, uint8_t *b) { (void)p; (void)b; return false; }
-void RecHw_Tx(uint8_t p, const uint8_t *buf, uint16_t len) { (void)p; if (ntx < 8 && len == PSU_LEN_FW_ACK) memcpy(tx[ntx++], buf, len); }
+void RecHw_Tx(uint8_t p, const uint8_t *buf, uint16_t len) { (void)p;
+    if (ntx < 8 && len == PSU_LEN_FW_ACK) memcpy(tx[ntx++], buf, len);
+    else if (len == PSU_LEN_VERSION) { memcpy(ver_reply, buf, len); nver++; } }
 void RecHw_ResetSystem(void) { reset_called = true; }
 
 static int fails;
@@ -30,6 +33,8 @@ static void send_begin(uint32_t size, uint32_t crc, uint32_t ver)
 { uint8_t f[PSU_LEN_FW_BEGIN]; ntx=0; Psu_FrameBegin(f,sizeof f,PSU_CMD_FW_BEGIN); be32w(&f[OTAP_BEGIN_OFF_SIZE],size); be32w(&f[OTAP_BEGIN_OFF_CRC32],crc); be32w(&f[OTAP_BEGIN_OFF_VERSION],ver); Psu_FrameSeal(f,sizeof f); feed_frame(f,sizeof f); }
 static void send_data(uint16_t seq, const uint8_t *d, uint16_t len)
 { uint8_t f[PSU_LEN_FW_DATA]; ntx=0; Psu_FrameBegin(f,sizeof f,PSU_CMD_FW_DATA); f[OTAP_DATA_OFF_SEQ]=seq>>8; f[OTAP_DATA_OFF_SEQ+1]=seq; f[OTAP_DATA_OFF_LEN]=len>>8; f[OTAP_DATA_OFF_LEN+1]=len; memset(&f[OTAP_DATA_OFF_PAYLOAD],0xFF,OTAP_CHUNK_MAX); memcpy(&f[OTAP_DATA_OFF_PAYLOAD],d,len); Psu_FrameSeal(f,sizeof f); feed_frame(f,sizeof f); }
+static void send_set_version(const char *str)
+{ uint8_t f[PSU_LEN_VERSION]; ntx=0; Psu_FrameBegin(f,sizeof f,PSU_CMD_FW_SET_VERSION); memset(&f[OTAP_VER_OFF_STR],0,OTAP_VERSION_LEN); strncpy((char*)&f[OTAP_VER_OFF_STR],str,OTAP_VERSION_LEN); Psu_FrameSeal(f,sizeof f); feed_frame(f,sizeof f); }
 static void send_ctrl(uint16_t cmd){ uint8_t f[PSU_LEN_FW_CTRL]; ntx=0; Psu_FrameBegin(f,sizeof f,cmd); Psu_FrameSeal(f,sizeof f); feed_frame(f,sizeof f); }
 
 static uint8_t img[1000];
@@ -49,6 +54,7 @@ static bool full_session(void)
     reset_called=false;
     send_erase();                         if (ack_status()!=OTAP_ST_OK || ack_cmd()!=0x96) return false;
     send_begin(sizeof img,img_crc,0x0102u); if (ack_status()!=OTAP_ST_OK) return false;
+    send_set_version("PSU_v1.2.3_abc123");  if (ack_status()!=OTAP_ST_OK || ack_cmd()!=0x9A) return false;
     for (uint16_t seq=0; (uint32_t)seq*OTAP_CHUNK_MAX < sizeof img; seq++) {
         uint32_t off=(uint32_t)seq*OTAP_CHUNK_MAX, n=sizeof img-off; if(n>OTAP_CHUNK_MAX)n=OTAP_CHUNK_MAX;
         send_data(seq,img+off,(uint16_t)n); if (ack_status()!=OTAP_ST_OK) return false;
@@ -119,6 +125,29 @@ int main(void)
     CHECK(!reset_called, "ENTER_REC o recovery khong reset");
     send_ctrl(0x9797);
     CHECK(ntx==0, "97 97 (rollback cu) khong con duoc hieu");
+
+    /* 7b. Version: GET truoc khi co anh = rong; SET sai trang thai bi tu choi; SET dung -> ghi vao header khi END */
+    memset(sim,0xFF,sizeof sim); CfgStore_Init(); nver=0;
+    send_ctrl(PSU_CMD_FW_GET_VERSION);
+    CHECK(nver==1 && Psu_FrameValid(ver_reply,PSU_LEN_VERSION) && Psu_Cmd(ver_reply)==PSU_CMD_FW_VERSION && Psu_Addr(ver_reply)==PSU_ADDR, "GET_VERSION: khung tra loi hop le (41 byte)");
+    { int e=1; for (int i=0;i<OTAP_VERSION_LEN;i++) if (ver_reply[OTAP_VER_OFF_STR+i]) e=0; CHECK(e,"chua co anh -> chuoi rong"); }
+    send_set_version("X"); CHECK(ack_status()==OTAP_ST_BUSY,"SET_VERSION khi chua ERASE bi tu choi (BUSY)");
+    send_erase(); send_set_version("hello\xFFworld"); CHECK(ack_status()==OTAP_ST_OK,"SET_VERSION sau ERASE");
+    send_erase(); send_begin(sizeof img,img_crc,0); CHECK(ack_status()==OTAP_ST_OK,"erase+begin");
+    CHECK(full_session(),"phien day du co version");
+    nver=0; send_ctrl(PSU_CMD_FW_GET_VERSION);
+    CHECK(nver==1 && memcmp(&ver_reply[OTAP_VER_OFF_STR],"PSU_v1.2.3_abc123",17)==0 && ver_reply[OTAP_VER_OFF_STR+17]==0,"GET_VERSION tra dung chuoi da ghi vao header");
+    { char hv[OTA_VERSION_STR_LEN]; CHECK(Ota_ReadVersionStr(OTA_SLOT_APP,hv) && strcmp(hv,"PSU_v1.2.3_abc123")==0,"Ota_ReadVersionStr doc header"); }
+    /* byte khong in duoc cat chuoi tai do; ERASE xoa version phien truoc */
+    send_erase(); send_set_version("hello\xFFworld"); send_begin(sizeof img,img_crc,0);
+    for (uint16_t sq=0; (uint32_t)sq*OTAP_CHUNK_MAX < sizeof img; sq++){ uint32_t off=(uint32_t)sq*OTAP_CHUNK_MAX,n=sizeof img-off; if(n>OTAP_CHUNK_MAX)n=OTAP_CHUNK_MAX; send_data(sq,img+off,(uint16_t)n); }
+    send_ctrl(PSU_CMD_FW_END); CHECK(ack_status()==OTAP_ST_OK,"END");
+    { char hv[OTA_VERSION_STR_LEN]; Ota_ReadVersionStr(OTA_SLOT_APP,hv); CHECK(strcmp(hv,"hello")==0,"ky tu khong in duoc (0xFF) cat chuoi: '%s'",hv); }
+    send_erase(); { char hv[OTA_VERSION_STR_LEN]; CHECK(!Ota_ReadVersionStr(OTA_SLOT_APP,hv) && hv[0]==0,"ERASE xoa header -> version rong"); }
+    send_begin(sizeof img,img_crc,0); send_set_version("fresh");
+    for (uint16_t sq=0; (uint32_t)sq*OTAP_CHUNK_MAX < sizeof img; sq++){ uint32_t off=(uint32_t)sq*OTAP_CHUNK_MAX,n=sizeof img-off; if(n>OTAP_CHUNK_MAX)n=OTAP_CHUNK_MAX; send_data(sq,img+off,(uint16_t)n); }
+    send_ctrl(PSU_CMD_FW_END);
+    { char hv[OTA_VERSION_STR_LEN]; Ota_ReadVersionStr(OTA_SLOT_APP,hv); CHECK(strcmp(hv,"fresh")==0,"version dat sau BEGIN van duoc ghi"); }
 
     /* 8. Quet mat dien o MOI thao tac flash cua mot phien */
     build_image(OTA_SLOT_APP);

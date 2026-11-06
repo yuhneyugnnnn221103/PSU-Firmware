@@ -128,6 +128,9 @@ static void test_monitor(void)
     m.safe_state[1]=1; m.pwr_on[1]=false; m.trip_count[1]=0;
     m.safe_state[3]=4; m.pwr_on[3]=false; m.trip_count[3]=7;
     m.slot='B'; m.version=0xAABBCCDD; m.trip=trip;
+    m.last_cmd=0x04; m.last_result=PSU_RES_NOT_OFF; m.last_count=0x0102;
+    for (int i=0;i<PSU_DIAG_COUNT;i++) m.diag[i]=(uint16_t)(0x1100+i);
+    m.uptime_s=0x01020304u;
 
     uint8_t f[PSU_LEN_MONITOR]; PsuMon_Build(f,&m);
     CHECK(f[0]==0xAB && f[1]==0xCD && f[2]==0x81 && f[3]==0x81 && f[4]==PSU_ADDR, "header 81 81 + dia chi");
@@ -146,7 +149,12 @@ static void test_monitor(void)
     CHECK(f[244]==0 && f[245]==0 && f[246]==0, "cum 3: BOOT(0) mac dinh trong mau");
     CHECK(f[247]==4 && f[248]==0 && f[249]==7, "cum 4: TRIPPED, trip count 7");
     CHECK(f[250]=='B' && f[251]==0xAA && f[252]==0xBB && f[253]==0xCC && f[254]==0xDD, "slot, version BE");
-    zero=1; for (int i=255;i<306;i++) if (f[i]) zero=0; CHECK(zero, "phan con lai cua vung du phong (byte 255..305) = 0");
+    /* +17 lenh cuoi, +18 ket qua, +19..20 bo dem, +21..38 diag, +39..42 uptime, +43 proto rev */
+    CHECK(f[255]==0x04 && f[256]==PSU_RES_NOT_OFF && f[257]==0x01 && f[258]==0x02, "lenh cuoi, ket qua, bo dem lenh");
+    { int ok=1; for (int i=0;i<PSU_DIAG_COUNT;i++) if (f[259+2*i]!=0x11 || f[260+2*i]!=(uint8_t)i) ok=0; CHECK(ok,"9 bo dem chan doan (byte 259..276)"); }
+    CHECK(f[277]==1 && f[278]==2 && f[279]==3 && f[280]==4, "uptime BE (byte 277..280)");
+    CHECK(f[281]==PSU_PROTO_REV, "phien ban giao thuc (byte 281)");
+    zero=1; for (int i=282;i<306;i++) if (f[i]) zero=0; CHECK(zero, "phan con lai cua vung du phong (byte 282..305) = 0");
     CHECK(f[306]*256+f[307] == Psu_Crc16(f,PSU_LEN_MONITOR) && f[308]==0xE1 && f[309]==0xE2, "CRC + duoi o cuoi");
 #if !PSU_CRC_INCLUDE_CMD
     CHECK(f[306]*256+f[307] == Crc16_Compute(&f[4], 306-4), "CRC tinh tu ADDR (byte 4) den het payload");

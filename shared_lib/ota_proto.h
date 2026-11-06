@@ -13,6 +13,11 @@
 
 #define OTAP_CHUNK_MAX          256u
 
+/* Version: chuoi ASCII 32 byte (ten file bin bo duoi), dem 00. SET_VERSION (41 B) va tra loi GET_VERSION (41 B):
+ *  [5..36] chuoi. Chi cac ky tu 0x20..0x7E co nghia; gap byte khac thi coi nhu het chuoi. */
+#define OTAP_VERSION_LEN        32u
+#define OTAP_VER_OFF_STR        5u
+
 #define OTAP_BEGIN_OFF_SIZE     5u
 #define OTAP_BEGIN_OFF_CRC32    9u
 #define OTAP_BEGIN_OFF_VERSION  13u

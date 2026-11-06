@@ -48,6 +48,17 @@ static struct {
     uint32_t tx_sent, tx_skipped, tx_error, tx_stuck;
 } s_stats;
 
+/* Lenh dieu khien/cau hinh cuoi va ket qua (khong ACK -> PC doc lai qua ban tin giam sat) */
+static uint8_t  s_last_cmd, s_last_res;
+static uint16_t s_last_cnt;
+
+static void record_cmd(uint8_t cmd, uint8_t res)
+{
+    s_last_cmd = cmd;
+    s_last_res = res;
+    s_last_cnt++;
+}
+
 typedef struct {
     UART_HandleTypeDef *huart;
     GPIO_TypeDef       *de_port;
@@ -225,8 +236,29 @@ static bool send_monitor(uint8_t port)
     m.version     = FwUpdate_RunningVersion();
     m.trip        = PsuTrip_Bytes();
 
+    m.last_cmd    = s_last_cmd;
+    m.last_result = s_last_res;
+    m.last_count  = s_last_cnt;
+    m.diag[0] = (uint16_t)s_stats.rx_frames;   m.diag[1] = (uint16_t)s_stats.rx_badcrc;
+    m.diag[2] = (uint16_t)s_stats.rx_badaddr;  m.diag[3] = (uint16_t)s_stats.rx_uart_err;
+    m.diag[4] = (uint16_t)s_stats.rx_overrun;  m.diag[5] = (uint16_t)s_stats.tx_sent;
+    m.diag[6] = (uint16_t)s_stats.tx_skipped;  m.diag[7] = (uint16_t)s_stats.tx_error;
+    m.diag[8] = (uint16_t)s_stats.tx_stuck;
+    m.uptime_s    = now / 1000u;
+
     PsuMon_Build(f, &m);
     return tx_start(port, PSU_LEN_MONITOR);
+}
+
+static bool send_version(uint8_t port)
+{
+    uint8_t *f = tx_acquire(port);
+    if (f == NULL) return false;
+
+    Psu_FrameBegin(f, PSU_LEN_VERSION, PSU_CMD_FW_VERSION);
+    FwUpdate_VersionStr((char *)&f[OTAP_VER_OFF_STR]);
+    Psu_FrameSeal(f, PSU_LEN_VERSION);
+    return tx_start(port, PSU_LEN_VERSION);
 }
 
 static bool send_cfg_reply(uint8_t port)
@@ -249,8 +281,8 @@ static void rx_exec(uint8_t p, const uint8_t *f)
 
     switch (Psu_Cmd(f)) {
 
-    case PSU_CMD_CONTROL:           /* khong ACK */
-        Safety_Control(f[5], f[6] == 0x01u);
+    case PSU_CMD_CONTROL:           /* khong ACK; ket qua o ban tin giam sat (+17..+20 vung du phong) */
+        record_cmd(0x01u, Safety_Control(f[5], f[6] == 0x01u) ? PSU_RES_OK : PSU_RES_REFUSED);
         break;
 
     case PSU_CMD_MON_REQ:
@@ -264,8 +296,10 @@ static void rx_exec(uint8_t p, const uint8_t *f)
     case PSU_CMD_CFG_WRITE:         /* khong ACK; PC doc lai de kiem tra */
         /* Doi thanh ghi INA/nguong khi nguon dang bat se doi thang do va ngat bao ve -> chi khi moi cum OFF.
          * Mask (byte 5..6) bo qua: luon ghi de toan bo. */
-        if (Safety_AllOff()) {
-            (void)PsuCfg_Store(&f[7]);
+        if (!Safety_AllOff()) {
+            record_cmd(0x04u, PSU_RES_NOT_OFF);
+        } else {
+            record_cmd(0x04u, PsuCfg_Store(&f[7]) ? PSU_RES_OK : PSU_RES_FLASH_FAIL);
         }
         break;
 
@@ -278,7 +312,12 @@ static void rx_exec(uint8_t p, const uint8_t *f)
         (void)send_ack(p, PSU_CMD_FW_ENTER_REC, st, 0u);
         break;
 
+    case PSU_CMD_FW_GET_VERSION:
+        (void)send_version(p);
+        break;
+
     case PSU_CMD_FW_ERASE:          /* App khong nap firmware: lenh nap chi hop le trong recovery */
+    case PSU_CMD_FW_SET_VERSION:
     case PSU_CMD_FW_BEGIN:
     case PSU_CMD_FW_DATA:
     case PSU_CMD_FW_END:

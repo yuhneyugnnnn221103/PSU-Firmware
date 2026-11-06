@@ -24,6 +24,9 @@ và các **mở rộng / khác biệt** so với file đó. Code: `shared_lib/ps
 | `95 95` | PC→PSU | 9 | INFO (app và recovery đều trả lời) |
 | `98 98` | PC→PSU | 9 | **ENTER_REC**: app ghi cờ rồi reset vào recovery (chỉ khi mọi cụm OFF); recovery trả ACK OK |
 | `96 96`, `90 90`..`93 93` | PC→PSU | 9 / 21 / 269 / 9 / 9 | ERASE / BEGIN / DATA / END / COMMIT: **chỉ ở recovery** (app trả ACK `NOT_RECOVERY`) |
+| `9A 9A` | PC→PSU | 41 | **SET_VERSION**: chuỗi ASCII 32 byte, chỉ ở recovery, giữa ERASE và END (app trả `NOT_RECOVERY`) |
+| `99 99` | PC→PSU | 9 | **GET_VERSION** (app và recovery) → trả `A9 A9` |
+| `A9 A9` | PSU→PC | 41 | Trả lời GET_VERSION: `[5..36]` chuỗi ASCII, đệm `00`, rỗng = chưa đặt |
 | `94 94` | PSU→PC | 17 | ACK |
 
 ## 2. Kiến trúc: 4 cụm DCM, mỗi cụm một máy trạng thái
@@ -45,8 +48,17 @@ và các **mở rộng / khác biệt** so với file đó. Code: `shared_lib/ps
 | +0..+2 | cụm 1: `safe_state` (0 BOOT, 1 OFF, 2 ARMING, 3 ON, 4 TRIPPED), trạng thái PWR_EN (1 bật / 0 tắt), số lần trip liên tiếp |
 | +3..+5 / +6..+8 / +9..+11 | cụm 2 / 3 / 4 (cùng 3 byte) |
 | +12 | slot firmware đang chạy (`A` = app) |
-| +13..+16 | version firmware đang chạy (u32 BE) |
-| +17..+67 | 0 (dự phòng) |
+| +13..+16 | số version cũ do `BEGIN` khai báo (u32 BE); PC gửi 0 thì luôn 0 (version nay là chuỗi, xem `99 99`) |
+| +17 | lệnh điều khiển/cấu hình gần nhất: `01` điều khiển, `04` ghi cấu hình, `00` chưa có lệnh nào |
+| +18 | kết quả lệnh đó: `0` OK, `1` ghi cấu hình bị từ chối (còn cụm chưa OFF), `2` lệnh bật bị từ chối (cụm đang TRIPPED, hoặc vừa ClearTrip trong cùng khung), `3` ghi Flash thất bại |
+| +19..+20 | bộ đếm số lệnh đã ghi nhận ở +17 (u16 BE, tràn quay vòng) |
+| +21..+38 | 9 bộ đếm chẩn đoán truyền thông, mỗi cái u16 BE tràn quay vòng, theo thứ tự: `rx_frames` (khung hợp lệ), `rx_badcrc`, `rx_badaddr`, `rx_uart_err`, `rx_overrun`, `tx_sent`, `tx_skipped`, `tx_error`, `tx_stuck` (cộng gộp cả 3 cổng) |
+| +39..+42 | thời gian chạy kể từ lần reset gần nhất (giây, u32 BE) |
+| +43 | phiên bản giao thức (hiện `1`) |
+| +44..+67 | 0 (dự phòng) |
+
+Điều khiển (`01 01`) và ghi cấu hình (`04 04`) không có ACK: PC kiểm tra bằng cách hỏi giám sát lần nữa và xem +17/+18/+19 (bộ đếm tăng thêm 1 và kết quả là `0`).
+Chỗ chưa có dữ liệu thật (cụm 2..4, Supply, RTC, VBUS…) giữ `00`.
 
 ## 4. Điều khiển `01 01`
 Bit *c* của Mask điều khiển EN của cụm *c+1* (bit0 = cụm 1 = chân `PWR_EN`); bit của cụm chưa có phần cứng bỏ qua.
@@ -94,7 +106,13 @@ Nếu app treo, cấp nguồn lại và gửi `INFO` trong 300 ms đầu: bootlo
   `[12]` trạng thái trial chỉ có ở trả lời INFO của app (bit7 confirmed, bit6..0 boot_count).
 - Status: 0 OK, 1 Refused (có cụm chưa OFF), 2 BadSize, 3 BadSeq, 4 CrcFail, 5 Busy, 6 NoCommitPending, 7 EraseFail, 8 WrongSlot (Reset_Handler ngoài vùng app),
   **9 ProgFail** (lỗi ghi flash, info = mã HAL/địa chỉ), 10 (dự phòng), **11 NotErased** (BEGIN khi chưa ERASE), **12 NotRecovery** (app nhận lệnh nạp).
+- **Version:** chuỗi do PC đặt (tên file bin bỏ đuôi, tối đa 32 ký tự in được `0x20..0x7E`, ví dụ `PSU_v1.2.3_abc123`). Gửi `SET_VERSION`
+  sau `ERASE` và trước `END` (thường ngay sau `BEGIN`); recovery ghi vào header của ảnh khi `END` nên chuỗi luôn đi cùng đúng ảnh đó.
+  `ERASE` xoá chuỗi của phiên trước; byte ngoài `0x20..0x7E` cắt chuỗi tại đó; không gửi thì chuỗi rỗng. Hỏi bằng `99 99` (app và recovery;
+  recovery trả chuỗi của ảnh đang có nếu header hợp lệ). Bin nạp bằng SWD không có header nên không có version.
 - Stop-and-wait: PC phải chờ ACK rồi mới gửi khung kế. Muốn về bản cũ: nạp lại file `.bin` cũ (không còn ROLLBACK, không còn slot B).
+
+Ví dụ khung có CRC (do firmware sinh): `docs/PSU_FRAME_EXAMPLES.md`.
 
 ## 8. Còn mở
 1. Bảng trip code chính thức (mục 6). 2. (Đã xong) CRC tính từ ADDR, `81 81` dài 310 byte. 3. Cụm 2..4, Supply, RTC: chưa có nguồn dữ liệu / phần cứng.

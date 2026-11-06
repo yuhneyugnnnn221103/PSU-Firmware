@@ -26,7 +26,8 @@ static struct {
     uint32_t   size, crc, version;
     uint32_t   run_crc, rx_bytes;
     int32_t    last_seq;
-} r = { R_IDLE, OTA_SLOT_NONE, 0, 0, 0, 0, 0, -1 };
+    char       ver[OTA_VERSION_STR_LEN];    /* chuoi version do SET_VERSION dat (ghi vao header khi END) */
+} r = { R_IDLE, OTA_SLOT_NONE, 0, 0, 0, 0, 0, -1, {0} };
 
 static uint8_t   rx_buf[REC_PORTS][PSU_LEN_FW_DATA];
 static psu_rx_t  rx[REC_PORTS];
@@ -90,6 +91,7 @@ static void cmd_erase(uint8_t p)
 {
     r.st = R_IDLE;
     r.slot = OTA_SLOT_NONE;
+    memset(r.ver, 0, sizeof(r.ver));       /* phien moi: chua co version */
 
     for (ota_slot_t s = OTA_SLOT_APP; s < OTA_SLOT_COUNT; s++) {
         for (uint8_t k = 0; k < OTA_SLOT_SECTORS; k++) {
@@ -222,6 +224,7 @@ static void cmd_end(uint8_t p)
     hdr.size        = r.size;
     hdr.crc32       = r.crc;
     hdr.install_seq = seq;
+    memcpy(hdr.version_str, r.ver, sizeof(hdr.version_str));
 
     const flash_op_result_t w = Flash_ProgramWords(g_ota_slots[r.slot].base,
                                                    (const uint8_t *)&hdr, OTA_HEADER_SIZE);
@@ -247,6 +250,30 @@ static void cmd_end(uint8_t p)
     send_ack(p, PSU_CMD_FW_END, OTAP_ST_OK, 1u);
 }
 
+/* SET_VERSION: chi giua ERASE va END (header ghi 1 lan o END). Chuoi duoc loc ve ky tu in duoc. */
+static void cmd_set_version(uint8_t p, const uint8_t *f)
+{
+    if (r.st != R_ERASED && r.st != R_RECEIVING) {
+        send_ack(p, PSU_CMD_FW_SET_VERSION, OTAP_ST_BUSY, 0u);
+        return;
+    }
+    Ota_VersionSanitize(r.ver, &f[OTAP_VER_OFF_STR]);
+    send_ack(p, PSU_CMD_FW_SET_VERSION, OTAP_ST_OK, 0u);
+}
+
+/* GET_VERSION: chuoi trong header cua anh dang co (rong neu chua co anh hop le/chua dat) */
+static void cmd_get_version(uint8_t p)
+{
+    uint8_t f[PSU_LEN_VERSION];
+    char    v[OTA_VERSION_STR_LEN];
+
+    (void)Ota_ReadVersionStr(OTA_SLOT_APP, v);
+    Psu_FrameBegin(f, sizeof(f), PSU_CMD_FW_VERSION);
+    memcpy(&f[OTAP_VER_OFF_STR], v, OTA_VERSION_STR_LEN);
+    Psu_FrameSeal(f, sizeof(f));
+    RecHw_Tx(p, f, sizeof(f));
+}
+
 static void cmd_commit(uint8_t p)
 {
     if (r.st != R_VERIFIED) {
@@ -270,6 +297,8 @@ static void exec(uint8_t p, const uint8_t *f, uint16_t n)
     case PSU_CMD_FW_DATA:    cmd_data(p, f);   break;
     case PSU_CMD_FW_END:     cmd_end(p);       break;
     case PSU_CMD_FW_COMMIT:  cmd_commit(p);    break;
+    case PSU_CMD_FW_SET_VERSION: cmd_set_version(p, f); break;
+    case PSU_CMD_FW_GET_VERSION: cmd_get_version(p);    break;
     case PSU_CMD_FW_INFO:
     case PSU_CMD_FW_ENTER_REC: send_ack(p, Psu_Cmd(f), OTAP_ST_OK, 0u); break;   /* dang o recovery roi */
     default: break;          /* lenh khac (dieu khien, giam sat...) khong co o recovery */
