@@ -49,7 +49,7 @@ Kiểm thử: `make -C tests/host test` (flash giả, cắt điện tại từng
 - Sau khi đã confirm, app không bị đếm lượt nữa; app treo/reset liên tục vẫn vào được recovery nhờ cửa sổ 300 ms.
 
 ## Cập nhật firmware
-PC → app: `INFO` (`95 95`, trả `'A'` + version + trạng thái trial) → `ENTER_REC` (`98 98`).
+PC → app: `INFO` (`95 95`, trả `'A'` + trạng thái trial; version lấy bằng `99 99`) → `ENTER_REC` (`98 98`).
 App (chỉ khi mọi cụm `OFF`) ghi bản ghi `BOOT` với `boot_count = FORCE_FAIL`, ACK, rồi reset sau ~50 ms.
 Bootloader thấy app "không khởi động được" → ở lại recovery. PC hỏi `INFO` đến khi slot trả về `'R'`, rồi nạp:
 

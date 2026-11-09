@@ -6,7 +6,7 @@
 /* Phan OTA dung chung giua App va Bootloader recovery. Khung (CMD, do dai, CRC)
  * dinh nghia o psu_frame.h. Vi tri byte duoi day tinh tu 0 (AB = byte 0).
  *
- *  BEGIN (21): [5..8] size  [9..12] crc32  [13..16] version
+ *  BEGIN (17): [5..8] size  [9..12] crc32   (version nay dung SET_VERSION, khong con so u32)
  *  DATA (269): [5..6] seq   [7..8] len     [9..264] data (256 B, chunk cuoi dem 0xFF)
  *  END/COMMIT/INFO/ERASE/ENTER_REC (9): chi co ADDR
  *  ACK  (17) : [5] AckCmd (1 byte)  [6] status  [7..10] info  [11] slot  [12] state */
@@ -20,7 +20,6 @@
 
 #define OTAP_BEGIN_OFF_SIZE     5u
 #define OTAP_BEGIN_OFF_CRC32    9u
-#define OTAP_BEGIN_OFF_VERSION  13u
 #define OTAP_DATA_OFF_SEQ       5u
 #define OTAP_DATA_OFF_LEN       7u
 #define OTAP_DATA_OFF_PAYLOAD   9u

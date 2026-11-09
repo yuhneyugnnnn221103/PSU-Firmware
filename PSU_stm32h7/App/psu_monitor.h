@@ -16,7 +16,7 @@
  *   +0..+2   cum 1: safe_state (SAFE_BOOT 0, OFF 1, ARMING 2, ON 3, TRIPPED 4), PWR_EN (1 = bat), so lan trip lien tiep
  *   +3..+5   cum 2 (cung 3 byte)       +6..+8 cum 3       +9..+11 cum 4
  *   +12      slot firmware dang chay ('A' = app / '?')
- *   +13..+16 so version cu do BEGIN khai bao (u32 BE; PC gui 0 thi 0). Version nay la chuoi, xem GET_VERSION
+ *   +13..+16 = 0 (du phong; truoc day la so version u32, da bo: version la chuoi, xem GET_VERSION 99 99)
  *   +17      lenh dieu khien/cau hinh cuoi: ma lenh (0x01 dieu khien, 0x04 ghi cau hinh; 0 = chua co)
  *   +18      ket qua (PSU_RES_*)
  *   +19..+20 bo dem lenh da ghi nhan o +17 (u16 BE, tran quay vong)
@@ -48,7 +48,6 @@ typedef struct {
     bool     pwr_on[PSU_CLUSTERS];
     uint8_t  trip_count[PSU_CLUSTERS];
     char     slot;
-    uint32_t version;
     const uint8_t *trip;                       /* PSU_TRIP_BYTES byte */
     uint8_t  last_cmd, last_result;            /* lenh dieu khien/cau hinh cuoi va ket qua */
     uint16_t last_count;

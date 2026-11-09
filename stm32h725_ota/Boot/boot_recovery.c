@@ -23,7 +23,7 @@ typedef enum { R_IDLE = 0, R_ERASED, R_RECEIVING, R_VERIFIED } rstate_t;
 static struct {
     rstate_t   st;
     ota_slot_t slot;
-    uint32_t   size, crc, version;
+    uint32_t   size, crc;
     uint32_t   run_crc, rx_bytes;
     int32_t    last_seq;
     char       ver[OTA_VERSION_STR_LEN];    /* chuoi version do SET_VERSION dat (ghi vao header khi END) */
@@ -123,7 +123,6 @@ static void cmd_begin(uint8_t p, const uint8_t *f)
     r.slot = OTA_SLOT_NONE;
     r.size = size;
     r.crc = be32(&f[OTAP_BEGIN_OFF_CRC32]);
-    r.version = be32(&f[OTAP_BEGIN_OFF_VERSION]);
     r.run_crc = CRC32_INIT;
     r.rx_bytes = 0u;
     r.last_seq = -1;
@@ -220,7 +219,6 @@ static void cmd_end(uint8_t p)
     static ota_image_header_t hdr __attribute__((aligned(32)));
     memset(&hdr, 0xFF, sizeof(hdr));
     hdr.magic       = OTA_IMG_MAGIC;
-    hdr.version     = r.version;
     hdr.size        = r.size;
     hdr.crc32       = r.crc;
     hdr.install_seq = seq;

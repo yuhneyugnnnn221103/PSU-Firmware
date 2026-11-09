@@ -56,7 +56,7 @@
 #define PSU_LEN_CFG_WRITE    915u
 #define PSU_LEN_MONITOR      310u
 #define PSU_LEN_CFG_REPLY    915u
-#define PSU_LEN_FW_BEGIN     21u
+#define PSU_LEN_FW_BEGIN     17u
 #define PSU_LEN_FW_DATA      269u
 #define PSU_LEN_FW_CTRL      9u        /* END / COMMIT / INFO / ERASE / ENTER_REC / GET_VERSION */
 #define PSU_LEN_FW_ACK       17u

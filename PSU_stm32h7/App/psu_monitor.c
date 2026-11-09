@@ -28,8 +28,6 @@ void PsuMon_Build(uint8_t *f, const psu_mon_t *m)
         x[3u * c + 2u] = m->trip_count[c];
     }
     x[12] = (uint8_t)m->slot;
-    x[13] = (uint8_t)(m->version >> 24); x[14] = (uint8_t)(m->version >> 16);
-    x[15] = (uint8_t)(m->version >> 8);  x[16] = (uint8_t)m->version;
 
     x[17] = m->last_cmd;
     x[18] = m->last_result;

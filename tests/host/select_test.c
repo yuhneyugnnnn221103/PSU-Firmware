@@ -19,7 +19,7 @@ static void make_image(uint32_t seq, uint32_t ver)
     uint32_t msp=0x24050000u, rh=Ota_CodeBase(APP)+0x101u;
     memcpy(code,&msp,4); memcpy(code+4,&rh,4);
     ota_image_header_t h; memset(&h,0xFF,sizeof h);
-    h.magic=OTA_IMG_MAGIC; h.version=ver; h.size=sizeof code; h.crc32=Crc32_Compute(code,sizeof code); h.install_seq=seq;
+    h.magic=OTA_IMG_MAGIC; h.reserved0=0xFFFFFFFFu; h.size=sizeof code; h.crc32=Crc32_Compute(code,sizeof code); h.install_seq=seq;
     memcpy(simp(g_ota_slots[APP].base),&h,sizeof h);
     memcpy(simp(Ota_CodeBase(APP)),code,sizeof code);
 }

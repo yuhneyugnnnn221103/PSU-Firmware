@@ -62,11 +62,11 @@ Chi recovery. Mot ACK khi xoa xong (timeout PC >= 30 s).
 AB CD 96 96 01 F1 D1 E1 E2
 ```
 
-### 90 90 BEGIN (21 byte)
-`[5..8]` size = 0x00001000, `[9..12]` CRC32 cua file (vi du DEADBEEF), `[13..16]` so version cu = 0 (khong dung).
+### 90 90 BEGIN (17 byte)
+`[5..8]` size = 0x00001000, `[9..12]` CRC32 cua file (vi du DEADBEEF). Khong con truong version u32 (dung SET_VERSION).
 
 ```
-AB CD 90 90 01 00 00 10 00 DE AD BE EF 00 00 00 00 5B F2 E1 E2
+AB CD 90 90 01 00 00 10 00 DE AD BE EF 2D 82 E1 E2
 ```
 
 ### 9A 9A SET_VERSION (41 byte)
@@ -116,7 +116,7 @@ AB CD 99 99 01 F1 D1 E1 E2
 ## PSU -> PC
 
 ### 94 94 ACK cho INFO (app, da confirm) (17 byte)
-`[5]`=95, `[6]` status 0, `[7..10]` so version cu = 0, `[11]` slot `A`, `[12]` 0x80 = confirmed, boot_count 0.
+`[5]`=95, `[6]` status 0, `[7..10]` info = 0, `[11]` slot `A`, `[12]` 0x80 = confirmed, boot_count 0.
 
 ```
 AB CD 94 94 01 95 00 00 00 00 00 41 80 D4 AF E1 E2

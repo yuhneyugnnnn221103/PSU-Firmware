@@ -23,15 +23,6 @@ void FwUpdate_Init(void)
     s.reset_pending = false;
 }
 
-uint32_t FwUpdate_RunningVersion(void)
-{
-    if (my_slot() == OTA_SLOT_NONE) return 0u;
-
-    const ota_image_header_t *h = Ota_Header(my_slot());
-    if (h->magic != OTA_IMG_MAGIC) return 0u;
-    return h->version;
-}
-
 uint8_t FwUpdate_RunningState(void)
 {
     cfg_boot_payload_t bp;

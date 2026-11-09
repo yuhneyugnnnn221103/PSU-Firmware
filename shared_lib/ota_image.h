@@ -11,7 +11,7 @@
 
 typedef struct {
 	uint32_t magic;
-	uint32_t version;       /* so (khong dung nua, PC gui 0) */
+	uint32_t reserved0;     /* khong dung (truoc day la so version u32); giu cho cac offset khac khong doi */
 	uint32_t size;
 	uint32_t crc32;
 	uint32_t install_seq;

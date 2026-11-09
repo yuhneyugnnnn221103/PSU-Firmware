@@ -15,8 +15,8 @@ Khung mẫu có CRC: `docs/PSU_FRAME_EXAMPLES.md`. Đặc tả: `docs/PSU_PROTOC
 | 1 | `INFO` | ACK, slot `R` |
 | 2 | `GET_VERSION` | `A9 A9`, chuỗi rỗng |
 | 3 | `ERASE` | một ACK status 0, info 1 (chờ đến 30 s) |
-| 4 | `BEGIN` (size, CRC32 của `app.bin`) | ACK 0 |
-| 5 | `SET_VERSION` (tên file bỏ đuôi) | ACK 0 |
+| 4 | `BEGIN` (17 byte: size, CRC32 của `app.bin`; không còn trường version u32) | ACK 0 |
+| 5 | `SET_VERSION` (tên file bỏ đuôi, ngay sau BEGIN; hướng dẫn PC: `docs/PC_GUIDE_VERSION.md`) | ACK 0 |
 | 6 | `DATA` 0..N-1 | mỗi gói ACK 0, info = seq |
 | 7 | `END` | ACK 0, info 1 |
 | 8 | `COMMIT` | ACK 0 rồi PSU reset |
@@ -24,7 +24,7 @@ Khung mẫu có CRC: `docs/PSU_FRAME_EXAMPLES.md`. Đặc tả: `docs/PSU_PROTOC
 | 10 | `GET_VERSION` | đúng chuỗi đã gửi |
 | 11 | sau ~15 s, `INFO` | bit7 = 1 (đã confirm). **Cần ≥ 1 INA đọc được**, nếu không app không tự confirm và bị loại sau 3 lần reset |
 
-Lỗi cố ý nên thử: `BEGIN` trước `ERASE` (status 11), `DATA` seq nhảy (status 3, info = seq cuối nhận đúng), `END` khi file sai CRC (status 4, info = CRC tính được), `DATA` chunk 0 của bin sai vùng link (status 8).
+Lỗi cố ý nên thử: `BEGIN` 21 byte kiểu cũ (không có ACK hợp lệ), `BEGIN` trước `ERASE` (status 11), `DATA` seq nhảy (status 3, info = seq cuối nhận đúng), `END` khi file sai CRC (status 4, info = CRC tính được), `DATA` chunk 0 của bin sai vùng link (status 8).
 
 ## 2. Vào recovery từ app
 1. Khi app đang chạy: `INFO` (slot `A`) → `ENTER_REC` (ACK 0, reset ~50 ms sau) → `INFO` lặp lại đến khi slot `R`.

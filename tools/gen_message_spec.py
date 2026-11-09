@@ -183,7 +183,7 @@ def build():
         ("95 95", "INFO", "N", "PC→PSU", 9, "App + Recovery", "94 94", "Kiểm tra kết nối, slot A/R, trạng thái trial"),
         ("98 98", "ENTER_REC", "N", "PC→PSU", 9, "App (Recovery: ACK OK)", "94 94", "App: ghi cờ, ACK, reset ~50 ms sau; chỉ khi mọi cụm OFF"),
         ("96 96", "ERASE", "N", "PC→PSU", 9, "Recovery", "94 94 khi xóa xong", "Xóa 5 sector vùng app. MỘT ACK khi xong, PC chờ >= 30 s (chưa đo)"),
-        ("90 90", "BEGIN", "N", "PC→PSU", 21, "Recovery", "94 94", "Khai báo size, CRC32; yêu cầu đã ERASE"),
+        ("90 90", "BEGIN", "N", "PC→PSU", 17, "Recovery", "94 94", "Khai báo size, CRC32; yêu cầu đã ERASE"),
         ("91 91", "DATA", "N", "PC→PSU", 269, "Recovery", "94 94", "Gói 256 byte, stop-and-wait"),
         ("9A 9A", "SET_VERSION", "V", "PC→PSU", 41, "Recovery", "94 94", "Chuỗi version 32 byte, giữa ERASE và END"),
         ("92 92", "END", "N", "PC→PSU", 9, "Recovery", "94 94", "Kiểm tra tổng byte + CRC32, ghi header"),
@@ -233,7 +233,7 @@ def build():
         (244, 246, "Cụm 3: safe_state, PWR_EN, trip_count", "3 x u8", "Như cụm 2", ST_OK),
         (247, 249, "Cụm 4: safe_state, PWR_EN, trip_count", "3 x u8", "Như cụm 2", ST_OK),
         (250, 250, "Slot firmware", "ASCII", "'A' = app đang chạy, '?' = không xác định (link sai)", ST_OK),
-        (251, 254, "Số version cũ", "u32", "Số do BEGIN khai báo (PC gửi 0 thì luôn 0). Version nay là chuỗi: dùng GET_VERSION (99 99)", ST_OK),
+        (251, 254, "Dự phòng (trước là số version u32, đã bỏ)", "4 byte", "Luôn 00. Version là chuỗi: dùng GET_VERSION (99 99)", ST_RES),
         (255, 255, "Lệnh gần nhất", "u8", "0x01 điều khiển, 0x04 ghi cấu hình, 0x00 chưa có lệnh nào", ST_OK),
         (256, 256, "Kết quả lệnh gần nhất", "u8", "0 OK; 1 ghi cấu hình bị từ chối (còn cụm chưa OFF); 2 lệnh bật bị từ chối (TRIPPED hoặc vừa ClearTrip cùng khung); 3 ghi Flash lỗi", ST_OK),
         (257, 258, "Bộ đếm lệnh", "u16", "Số lệnh đã ghi nhận ở 255 (tràn quay vòng). Tăng 1 sau mỗi lệnh điều khiển/ghi cấu hình", ST_OK),
@@ -399,7 +399,7 @@ def build():
         r = bytemap(ws, r, rows)
 
     for name, cmd, extra in [
-        ("95 95 – INFO (9 byte, app và recovery)", "95 95", "Kiểm tra kết nối. Trả ACK 94 94 (INFO): app có slot 'A', info = số version cũ, [12] trạng thái trial; recovery có slot 'R'"),
+        ("95 95 – INFO (9 byte, app và recovery)", "95 95", "Kiểm tra kết nối. Trả ACK 94 94 (INFO): app có slot 'A', info = 0, [12] trạng thái trial; recovery có slot 'R'"),
         ("98 98 – ENTER_REC (9 byte)", "98 98", "App: nếu mọi cụm OFF → ghi cờ 'vào recovery' vào Flash, ACK, reset sau ~50 ms; bootloader ở lại recovery. Recovery: ACK OK, không làm gì"),
         ("96 96 – ERASE (9 byte, recovery)", "96 96", "Xóa 5 sector vùng app (640 KB). MỘT ACK duy nhất khi xóa xong (info = 1); lỗi thì ACK status 7 với info = mã lỗi HAL. Xóa luôn chuỗi version của phiên trước"),
         ("92 92 – END (9 byte, recovery)", "92 92", "Kiểm tra tổng số byte và CRC32 đã khai báo; cấp install_seq; ghi header (1 KB, ghi cuối cùng, kèm chuỗi version); kiểm lại CRC từ Flash + vector; ghi bản ghi boot (0, chưa confirm)"),
@@ -407,11 +407,10 @@ def build():
         ("99 99 – GET_VERSION (9 byte, app và recovery)", "99 99", "Trả khung A9 A9 (xem bên dưới)"),
     ]:
         msg(name, frame_head_rows(cmd, 9) + [("SEC", "Không có payload. " + extra)] + frame_tail_rows(9))
-    msg("90 90 – BEGIN (21 byte, recovery, sau ERASE)", frame_head_rows("90 90", 21) + [
+    msg("90 90 – BEGIN (17 byte, recovery, sau ERASE)", frame_head_rows("90 90", 17) + [
         (5, 8, "Kích thước file", "u32", "Số byte của file .bin (không có header, không đệm). 1 .. 0x9FC00 (639 KB), nếu không: ACK status 2 (info = 0x0009FC00)", ST_OK),
         (9, 12, "CRC32 file", "u32", "CRC32 chuẩn zlib của toàn bộ file .bin; so với CRC firmware tính được ở END", ST_OK),
-        (13, 16, "Số version cũ", "u32", "Không dùng nữa, gửi 00 00 00 00 (còn lưu vào header và hiện ở INFO/81 81)", ST_OK),
-    ] + frame_tail_rows(21))
+    ] + frame_tail_rows(17))
     msg("91 91 – DATA (269 byte, recovery)", frame_head_rows("91 91", 269) + [
         (5, 6, "seq", "u16", "Số thứ tự gói, từ 0, liên tiếp. Sai: ACK status 3 (info = seq cuối nhận đúng)", ST_OK),
         (7, 8, "len", "u16", "Số byte hợp lệ trong gói (1..256). Chỉ gói cuối < 256", ST_OK),
@@ -493,7 +492,7 @@ def build():
     ws.cell(row=r, column=1, value="Ý nghĩa 'info' (byte 7..10 của ACK)").font = F_BOLD
     r += 1
     r = table(["Lệnh", "Status", "Info"], [
-        ("INFO", "0", "App: số version cũ (u32, header); Recovery: 0"),
+        ("INFO", "0", "0 (version dùng GET_VERSION)"),
         ("ERASE", "0 / 7", "OK: 1 (xóa xong); ERASE_FAIL: mã lỗi HAL Flash"),
         ("BEGIN", "2 / 11", "BAD_SIZE: kích thước tối đa 0x0009FC00; NOT_ERASED: 0"),
         ("DATA", "0", "Số seq vừa ghi"),

@@ -29,8 +29,8 @@ static int ack_status(void){ return ntx ? tx[ntx-1][OTAP_ACK_OFF_STATUS] : 255; 
 static int ack_cmd(void){ return ntx ? tx[ntx-1][OTAP_ACK_OFF_CMD] : 255; }
 
 static void send_erase(void){ uint8_t f[PSU_LEN_FW_CTRL]; ntx=0; Psu_FrameBegin(f,sizeof f,PSU_CMD_FW_ERASE); Psu_FrameSeal(f,sizeof f); feed_frame(f,sizeof f); }
-static void send_begin(uint32_t size, uint32_t crc, uint32_t ver)
-{ uint8_t f[PSU_LEN_FW_BEGIN]; ntx=0; Psu_FrameBegin(f,sizeof f,PSU_CMD_FW_BEGIN); be32w(&f[OTAP_BEGIN_OFF_SIZE],size); be32w(&f[OTAP_BEGIN_OFF_CRC32],crc); be32w(&f[OTAP_BEGIN_OFF_VERSION],ver); Psu_FrameSeal(f,sizeof f); feed_frame(f,sizeof f); }
+static void send_begin(uint32_t size, uint32_t crc, uint32_t unused)
+{ (void)unused; uint8_t f[PSU_LEN_FW_BEGIN]; ntx=0; Psu_FrameBegin(f,sizeof f,PSU_CMD_FW_BEGIN); be32w(&f[OTAP_BEGIN_OFF_SIZE],size); be32w(&f[OTAP_BEGIN_OFF_CRC32],crc); Psu_FrameSeal(f,sizeof f); feed_frame(f,sizeof f); }
 static void send_data(uint16_t seq, const uint8_t *d, uint16_t len)
 { uint8_t f[PSU_LEN_FW_DATA]; ntx=0; Psu_FrameBegin(f,sizeof f,PSU_CMD_FW_DATA); f[OTAP_DATA_OFF_SEQ]=seq>>8; f[OTAP_DATA_OFF_SEQ+1]=seq; f[OTAP_DATA_OFF_LEN]=len>>8; f[OTAP_DATA_OFF_LEN+1]=len; memset(&f[OTAP_DATA_OFF_PAYLOAD],0xFF,OTAP_CHUNK_MAX); memcpy(&f[OTAP_DATA_OFF_PAYLOAD],d,len); Psu_FrameSeal(f,sizeof f); feed_frame(f,sizeof f); }
 static void send_set_version(const char *str)
@@ -148,6 +148,13 @@ int main(void)
     for (uint16_t sq=0; (uint32_t)sq*OTAP_CHUNK_MAX < sizeof img; sq++){ uint32_t off=(uint32_t)sq*OTAP_CHUNK_MAX,n=sizeof img-off; if(n>OTAP_CHUNK_MAX)n=OTAP_CHUNK_MAX; send_data(sq,img+off,(uint16_t)n); }
     send_ctrl(PSU_CMD_FW_END);
     { char hv[OTA_VERSION_STR_LEN]; Ota_ReadVersionStr(OTA_SLOT_APP,hv); CHECK(strcmp(hv,"fresh")==0,"version dat sau BEGIN van duoc ghi"); }
+
+    /* 7a. BEGIN kieu cu (21 byte, co truong version) khong con duoc chap nhan: khong co ACK */
+    memset(sim,0xFF,sizeof sim); CfgStore_Init(); send_erase();
+    { uint8_t f[21]; ntx=0; Psu_FrameBegin(f,sizeof f,PSU_CMD_FW_BEGIN); be32w(&f[5],sizeof img); be32w(&f[9],img_crc); be32w(&f[13],0x01020304u); Psu_FrameSeal(f,sizeof f);
+      feed_frame(f,sizeof f);
+      CHECK(ntx==0 || ack_status()!=OTAP_ST_OK, "BEGIN 21 byte (cu) khong duoc chap nhan"); }
+    Boot_RecoveryResync(0);
 
     /* 8. Quet mat dien o MOI thao tac flash cua mot phien */
     build_image(OTA_SLOT_APP);

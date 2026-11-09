@@ -38,7 +38,7 @@ bool Ota_ImageValid(ota_slot_t s)
     const uint32_t lo = g_ota_slots[s].base;
     const uint32_t hi = lo + OTA_SLOT_SIZE;
 
-    /* 5 word dau header: magic, version, size, crc32, install_seq */
+    /* 5 word dau header: magic, reserved0, size, crc32, install_seq */
     uint32_t hw[5];
     FlashGuard_Begin(lo, hi);
     FlashGuard_CopyWords(hw, lo, sizeof(hw));

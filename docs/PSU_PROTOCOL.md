@@ -6,6 +6,8 @@ và các **mở rộng / khác biệt** so với file đó. Code: `shared_lib/ps
 
 > **Bảng byte chi tiết theo từng nhóm bản tin (Excel):** `docs/PSU_Message_Spec.xlsx` (sinh bằng `python tools/gen_message_spec.py`, khung mẫu: `docs/PSU_FRAME_EXAMPLES.md`).
 
+> **Hướng dẫn phía phần mềm PC (SET/GET_VERSION, bỏ version u32):** `docs/PC_GUIDE_VERSION.md`; code tham chiếu: `tools/pc_reference/`.
+
 ## 1. Quy ước
 - Khung: `AB CD | CMD (2 byte) | ADDR | dữ liệu | CRC16 (BE) | E1 E2`. Mọi số nhiều byte big-endian.
 - **CRC** CRC16-CCITT-FALSE (poly `0x1021`, init `0xFFFF`), **tính từ byte ADDR đến hết payload** (bỏ qua `AB CD`, `CMD CMD`, CRC và `E1 E2`),
@@ -25,7 +27,7 @@ và các **mở rộng / khác biệt** so với file đó. Code: `shared_lib/ps
 | `04 04` | PC→PSU | 915 | Ghi cấu hình (không ACK) |
 | `95 95` | PC→PSU | 9 | INFO (app và recovery đều trả lời) |
 | `98 98` | PC→PSU | 9 | **ENTER_REC**: app ghi cờ rồi reset vào recovery (chỉ khi mọi cụm OFF); recovery trả ACK OK |
-| `96 96`, `90 90`..`93 93` | PC→PSU | 9 / 21 / 269 / 9 / 9 | ERASE / BEGIN / DATA / END / COMMIT: **chỉ ở recovery** (app trả ACK `NOT_RECOVERY`) |
+| `96 96`, `90 90`..`93 93` | PC→PSU | 9 / 17 / 269 / 9 / 9 | ERASE / BEGIN / DATA / END / COMMIT: **chỉ ở recovery** (app trả ACK `NOT_RECOVERY`) |
 | `9A 9A` | PC→PSU | 41 | **SET_VERSION**: chuỗi ASCII 32 byte, chỉ ở recovery, giữa ERASE và END (app trả `NOT_RECOVERY`) |
 | `99 99` | PC→PSU | 9 | **GET_VERSION** (app và recovery) → trả `A9 A9` |
 | `A9 A9` | PSU→PC | 41 | Trả lời GET_VERSION: `[5..36]` chuỗi ASCII, đệm `00`, rỗng = chưa đặt |
@@ -50,7 +52,7 @@ và các **mở rộng / khác biệt** so với file đó. Code: `shared_lib/ps
 | +0..+2 | cụm 1: `safe_state` (0 BOOT, 1 OFF, 2 ARMING, 3 ON, 4 TRIPPED), trạng thái PWR_EN (1 bật / 0 tắt), số lần trip liên tiếp |
 | +3..+5 / +6..+8 / +9..+11 | cụm 2 / 3 / 4 (cùng 3 byte) |
 | +12 | slot firmware đang chạy (`A` = app) |
-| +13..+16 | số version cũ do `BEGIN` khai báo (u32 BE); PC gửi 0 thì luôn 0 (version nay là chuỗi, xem `99 99`) |
+| +13..+16 | 0 (dự phòng; trước đây là số version u32, **đã bỏ**: version là chuỗi, xem `99 99`) |
 | +17 | lệnh điều khiển/cấu hình gần nhất: `01` điều khiển, `04` ghi cấu hình, `00` chưa có lệnh nào |
 | +18 | kết quả lệnh đó: `0` OK, `1` ghi cấu hình bị từ chối (còn cụm chưa OFF), `2` lệnh bật bị từ chối (cụm đang TRIPPED, hoặc vừa ClearTrip trong cùng khung), `3` ghi Flash thất bại |
 | +19..+20 | bộ đếm số lệnh đã ghi nhận ở +17 (u16 BE, tràn quay vòng) |
@@ -98,9 +100,9 @@ Lệnh bật bị từ chối (cụm đang TRIPPED hoặc đang nạp code) → 
 | TRIP7..10 | 0 |
 
 ## 7. Nạp code (chỉ trong recovery)
-App **không** nạp firmware. Trình tự từ PC: `INFO` (`95 95`; app trả slot `A` + version) → `ENTER_REC` (`98 98`; app ACK rồi reset ~50 ms sau)
+App **không** nạp firmware. Trình tự từ PC: `INFO` (`95 95`; app trả slot `A` + trạng thái trial; `info` = 0) → `ENTER_REC` (`98 98`; app ACK rồi reset ~50 ms sau)
 → hỏi `INFO` lặp lại đến khi slot trả `R` (recovery) → `ERASE` (xoá vùng app 5 sector; **một ACK duy nhất khi xoá xong**, `Info = 1`;
-timeout phía PC ≥ 30 s, chưa đo) → `BEGIN` (size ≤ 639 KB, CRC32, version; ACK ngay; chỉ sau ERASE, nếu không `NOT_ERASED`) →
+timeout phía PC ≥ 30 s, chưa đo) → `BEGIN` (size ≤ 639 KB, CRC32; **17 byte, không còn trường version u32**; ACK ngay; chỉ sau ERASE, nếu không `NOT_ERASED`) →
 `DATA` (256 B/gói, gói cuối đệm `FF`, khung luôn 269 B) → `END` → `COMMIT` (ACK rồi reset, bootloader chạy app mới).
 Nếu bootloader chưa có app hợp lệ (board mới / app hỏng) thì nó đã ở recovery sẵn: bỏ qua `ENTER_REC`.
 Nếu app treo, cấp nguồn lại và gửi `INFO` trong 300 ms đầu: bootloader ở lại recovery.

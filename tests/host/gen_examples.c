@@ -72,7 +72,7 @@ int main(void)
     f[5] = 0x00; f[6] = 0x00; f[7] = 0x10; f[8] = 0x00;           /* size 0x1000 */
     f[9] = 0xDE; f[10] = 0xAD; f[11] = 0xBE; f[12] = 0xEF;        /* crc32 toan file (vi du) */
     Psu_FrameSeal(f, PSU_LEN_FW_BEGIN);
-    show("90 90 BEGIN", "`[5..8]` size = 0x00001000, `[9..12]` CRC32 cua file (vi du DEADBEEF), `[13..16]` so version cu = 0 (khong dung).",
+    show("90 90 BEGIN", "`[5..8]` size = 0x00001000, `[9..12]` CRC32 cua file (vi du DEADBEEF). Khong con truong version u32 (dung SET_VERSION).",
          f, PSU_LEN_FW_BEGIN);
 
     Psu_FrameBegin(f, PSU_LEN_VERSION, PSU_CMD_FW_SET_VERSION);
@@ -95,7 +95,7 @@ int main(void)
     printf("## PSU -> PC\n\n");
 
     ack(f, PSU_CMD_FW_INFO, OTAP_ST_OK, 0u, 'A', OTAP_STATE_CONFIRMED);
-    show("94 94 ACK cho INFO (app, da confirm)", "`[5]`=95, `[6]` status 0, `[7..10]` so version cu = 0, `[11]` slot `A`, `[12]` 0x80 = confirmed, boot_count 0.",
+    show("94 94 ACK cho INFO (app, da confirm)", "`[5]`=95, `[6]` status 0, `[7..10]` info = 0, `[11]` slot `A`, `[12]` 0x80 = confirmed, boot_count 0.",
          f, PSU_LEN_FW_ACK);
 
     ack(f, PSU_CMD_FW_INFO, OTAP_ST_OK, 0u, 'R', 0u);
@@ -122,7 +122,7 @@ int main(void)
     uint8_t trip[PSU_TRIP_BYTES] = {0};
     m.trip = trip;
     m.safe_state[0] = 1; m.safe_state[1] = 1; m.safe_state[2] = 1; m.safe_state[3] = 1;   /* OFF */
-    m.slot = 'A'; m.version = 0u;
+    m.slot = 'A';
     m.cur24[0] = 0x00123456u; m.temp[0] = 0x0A00; m.fresh_mask = 0x01;
     m.last_cmd = 0x01; m.last_result = PSU_RES_OK; m.last_count = 1;
     m.diag[0] = 5; m.diag[5] = 5; m.uptime_s = 60;

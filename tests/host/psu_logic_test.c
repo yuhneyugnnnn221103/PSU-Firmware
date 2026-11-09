@@ -127,7 +127,7 @@ static void test_monitor(void)
     m.safe_state[0]=3; m.pwr_on[0]=true;  m.trip_count[0]=2;
     m.safe_state[1]=1; m.pwr_on[1]=false; m.trip_count[1]=0;
     m.safe_state[3]=4; m.pwr_on[3]=false; m.trip_count[3]=7;
-    m.slot='B'; m.version=0xAABBCCDD; m.trip=trip;
+    m.slot='B'; m.trip=trip;
     m.last_cmd=0x04; m.last_result=PSU_RES_NOT_OFF; m.last_count=0x0102;
     for (int i=0;i<PSU_DIAG_COUNT;i++) m.diag[i]=(uint16_t)(0x1100+i);
     m.uptime_s=0x01020304u;
@@ -143,12 +143,12 @@ static void test_monitor(void)
     zero=1; for (int i=221;i<228;i++) if (f[i]) zero=0; CHECK(zero, "RTC = 0");
     CHECK(memcmp(&f[228], trip, 10)==0, "10 trip byte o 229..238");
     CHECK(PSU_LEN_MONITOR == 310u, "khung giam sat 310 byte");
-    /* vung du phong 68 byte (byte 239..306): 4 x {safe_state, PWR_EN, trip count}, slot, version, con lai = 0 */
+    /* vung du phong 68 byte (byte 239..306): 4 x {safe_state, PWR_EN, trip count}, slot, 4 byte dau = 0 (version u32 da bo), con lai = diag */
     CHECK(f[238]==3 && f[239]==1 && f[240]==2, "cum 1: ON, PWR_EN, trip count 2");
     CHECK(f[241]==1 && f[242]==0 && f[243]==0, "cum 2: OFF");
     CHECK(f[244]==0 && f[245]==0 && f[246]==0, "cum 3: BOOT(0) mac dinh trong mau");
     CHECK(f[247]==4 && f[248]==0 && f[249]==7, "cum 4: TRIPPED, trip count 7");
-    CHECK(f[250]=='B' && f[251]==0xAA && f[252]==0xBB && f[253]==0xCC && f[254]==0xDD, "slot, version BE");
+    CHECK(f[250]=='B' && f[251]==0 && f[252]==0 && f[253]==0 && f[254]==0, "slot; +13..+16 (byte 251..254) = 0 (da bo version u32)");
     /* +17 lenh cuoi, +18 ket qua, +19..20 bo dem, +21..38 diag, +39..42 uptime, +43 proto rev */
     CHECK(f[255]==0x04 && f[256]==PSU_RES_NOT_OFF && f[257]==0x01 && f[258]==0x02, "lenh cuoi, ket qua, bo dem lenh");
     { int ok=1; for (int i=0;i<PSU_DIAG_COUNT;i++) if (f[259+2*i]!=0x11 || f[260+2*i]!=(uint8_t)i) ok=0; CHECK(ok,"9 bo dem chan doan (byte 259..276)"); }

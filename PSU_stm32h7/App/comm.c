@@ -196,14 +196,9 @@ static bool send_info(uint8_t port)
     uint8_t *f = tx_acquire(port);
     if (f == NULL) return false;
 
-    const uint32_t ver = FwUpdate_RunningVersion();
     Psu_FrameBegin(f, PSU_LEN_FW_ACK, PSU_CMD_FW_ACK);
     f[OTAP_ACK_OFF_CMD]    = OTAP_ACKCMD(PSU_CMD_FW_INFO);
-    f[OTAP_ACK_OFF_STATUS] = OTAP_ST_OK;
-    f[OTAP_ACK_OFF_INFO + 0] = (uint8_t)(ver >> 24);
-    f[OTAP_ACK_OFF_INFO + 1] = (uint8_t)(ver >> 16);
-    f[OTAP_ACK_OFF_INFO + 2] = (uint8_t)(ver >> 8);
-    f[OTAP_ACK_OFF_INFO + 3] = (uint8_t)ver;
+    f[OTAP_ACK_OFF_STATUS] = OTAP_ST_OK;                 /* info (byte 7..10) = 0: version la chuoi, xem GET_VERSION */
     f[OTAP_ACK_OFF_SLOT]   = (uint8_t)FwUpdate_RunningSlot();
     f[OTAP_ACK_OFF_STATE]  = FwUpdate_RunningState();
     Psu_FrameSeal(f, PSU_LEN_FW_ACK);
@@ -233,7 +228,6 @@ static bool send_monitor(uint8_t port)
         m.pwr_on[c]     = Safety_PowerIsOn(c);
     }
     m.slot        = FwUpdate_RunningSlot();
-    m.version     = FwUpdate_RunningVersion();
     m.trip        = PsuTrip_Bytes();
 
     m.last_cmd    = s_last_cmd;
