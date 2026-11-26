@@ -161,6 +161,40 @@ static void test_monitor(void)
 #endif
 }
 
+/* ---- chinh sach ghi cau hinh: ghi moi luc, tru khi can xoa sector ma con cum cap nguon ---- */
+static void test_cfg_write_policy(void)
+{
+    memset(sim,0xFF,sizeof sim); CfgStore_Init(); PsuTrip_Init(); PsuCfg_Load();
+    uint8_t w[PSU_CFG_LEN];
+
+    /* cum dang bat, bank con cho: van ghi duoc */
+    PsuCfg_BuildDefault(w); w[1] = 0x11;
+    CHECK(CfgStore_NeedsErase(), "bank chua khoi tao can xoa/COMMIT");
+    CHECK(PsuCfg_Write(w, true) == PSU_RES_ERASE_DEFER, "bank chua khoi tao + cum bat: hoan");
+    CHECK(PsuCfg_Write(w, false) == PSU_RES_OK, "khoi tao bank luc cum tat");
+    CHECK(!CfgStore_NeedsErase(), "bank da khoi tao, con cho");
+    w[1] = 0x12;
+    CHECK(PsuCfg_Write(w, true) == PSU_RES_OK && memcmp(PsuCfg_Blob(), w, PSU_CFG_LEN)==0, "ghi khi cum dang bat (khong can xoa)");
+
+    /* ghi cho den khi lan ghi ke tiep co the phai nen bank */
+    int n = 0;
+    while (!CfgStore_NeedsErase() && n < 400) { w[2] = (uint8_t)n; CHECK(PsuCfg_Write(w, false) == PSU_RES_OK, "ghi luc cum tat"); n++; }
+    CHECK(CfgStore_NeedsErase(), "bank gan day sau %d lan ghi", n);
+
+    /* can xoa + con cum bat: hoan, khong ghi gi */
+    uint8_t keep[PSU_CFG_LEN]; memcpy(keep, PsuCfg_Blob(), PSU_CFG_LEN);
+    uint8_t w2[PSU_CFG_LEN]; memcpy(w2, w, sizeof w2); w2[3] ^= 0xFF;
+    long ops_before = ops;
+    CHECK(PsuCfg_Write(w2, true) == PSU_RES_ERASE_DEFER, "hoan khi can xoa sector ma con cum bat");
+    CHECK(ops == ops_before, "hoan: khong cham Flash");
+    CHECK(memcmp(PsuCfg_Blob(), keep, PSU_CFG_LEN)==0, "hoan: cau hinh cu giu nguyen");
+
+    /* tat het cum: nen bank roi ghi duoc */
+    CHECK(PsuCfg_Write(w2, false) == PSU_RES_OK && memcmp(PsuCfg_Blob(), w2, PSU_CFG_LEN)==0, "ghi luc cum tat (co nen bank)");
+    CfgStore_Init(); PsuCfg_Load();
+    CHECK(memcmp(PsuCfg_Blob(), w2, PSU_CFG_LEN)==0, "doc lai tu Flash sau compaction khop");
+}
+
 /* ---- anh cau hinh ---- */
 static void test_cfg(void)
 {
@@ -204,6 +238,7 @@ int main(void)
     test_trip();
     test_monitor();
     test_cfg();
+    test_cfg_write_policy();
     printf("psu_logic tests done, fails=%d\n", fails);
     return fails ? 1 : 0;
 }

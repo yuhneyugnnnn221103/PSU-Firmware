@@ -288,13 +288,10 @@ static void rx_exec(uint8_t p, const uint8_t *f)
         break;
 
     case PSU_CMD_CFG_WRITE:         /* khong ACK; PC doc lai de kiem tra */
-        /* Doi thanh ghi INA/nguong khi nguon dang bat se doi thang do va ngat bao ve -> chi khi moi cum OFF.
+        /* Ghi duoc moi luc, ke ca khi cum dang bat. Nguong phan mem ap ngay; thanh ghi INA cua cum dang cap
+         * nguon duoc nap sau, khi cum ve OFF (xem app_main.c). Hoan neu can xoa sector ma con cum cap nguon.
          * Mask (byte 5..6) bo qua: luon ghi de toan bo. */
-        if (!Safety_AllOff()) {
-            record_cmd(0x04u, PSU_RES_NOT_OFF);
-        } else {
-            record_cmd(0x04u, PsuCfg_Store(&f[7]) ? PSU_RES_OK : PSU_RES_FLASH_FAIL);
-        }
+        record_cmd(0x04u, PsuCfg_Write(&f[7], Safety_AnyPowerOn()));
         break;
 
     case PSU_CMD_FW_INFO:

@@ -179,7 +179,7 @@ def build():
         ("81 81", "Giám sát", "G", "PSU→PC", 310, "App", "-", "Dòng/nhiệt độ DCM, trip code, trạng thái 4 cụm, chẩn đoán"),
         ("03 03", "Hỏi cấu hình", "C", "PC→PSU", 13, "App", "82 82", "[5..8] dự phòng = 00"),
         ("82 82", "Trả lời cấu hình", "C", "PSU→PC", 915, "App", "-", "Cùng bố cục 04 04 (Mask = 0); trả cấu hình đang dùng (đã lưu hoặc mặc định)"),
-        ("04 04", "Ghi cấu hình", "C", "PC→PSU", 915, "App (mọi cụm OFF)", "Không", "Lưu Flash rồi mới dùng; kiểm tra bằng 03 03 và 81 81 (+17..+19)"),
+        ("04 04", "Ghi cấu hình", "C", "PC→PSU", 915, "App (mọi trạng thái)", "Không", "Lưu Flash rồi mới dùng; kiểm tra bằng 03 03 và 81 81 (+17..+19). Hoãn (+18 = 4) nếu cần xóa sector mà còn cụm cấp nguồn"),
         ("95 95", "INFO", "N", "PC→PSU", 9, "App + Recovery", "94 94", "Kiểm tra kết nối, slot A/R, trạng thái trial"),
         ("98 98", "ENTER_REC", "N", "PC→PSU", 9, "App (Recovery: ACK OK)", "94 94", "App: ghi cờ, ACK, reset ~50 ms sau; chỉ khi mọi cụm OFF"),
         ("96 96", "ERASE", "N", "PC→PSU", 9, "Recovery", "94 94 khi xóa xong", "Xóa 5 sector vùng app. MỘT ACK khi xong, PC chờ >= 30 s (chưa đo)"),
@@ -235,7 +235,7 @@ def build():
         (250, 250, "Slot firmware", "ASCII", "'A' = app đang chạy, '?' = không xác định (link sai)", ST_OK),
         (251, 254, "Dự phòng (trước là số version u32, đã bỏ)", "4 byte", "Luôn 00. Version là chuỗi: dùng GET_VERSION (99 99)", ST_RES),
         (255, 255, "Lệnh gần nhất", "u8", "0x01 điều khiển, 0x04 ghi cấu hình, 0x00 chưa có lệnh nào", ST_OK),
-        (256, 256, "Kết quả lệnh gần nhất", "u8", "0 OK; 1 ghi cấu hình bị từ chối (còn cụm chưa OFF); 2 lệnh bật bị từ chối (TRIPPED hoặc vừa ClearTrip cùng khung); 3 ghi Flash lỗi", ST_OK),
+        (256, 256, "Kết quả lệnh gần nhất", "u8", "0 OK; 2 lệnh bật bị từ chối (TRIPPED hoặc vừa ClearTrip cùng khung); 3 ghi Flash lỗi; 4 ghi cấu hình bị hoãn (cần xóa sector mà còn cụm cấp nguồn). Mã 1 không còn dùng", ST_OK),
         (257, 258, "Bộ đếm lệnh", "u16", "Số lệnh đã ghi nhận ở 255 (tràn quay vòng). Tăng 1 sau mỗi lệnh điều khiển/ghi cấu hình", ST_OK),
         (259, 260, "rx_frames", "u16", "Số khung hợp lệ (đúng CRC, đúng địa chỉ), cộng gộp 3 cổng", ST_OK),
         (261, 262, "rx_badcrc", "u16", "Số khung sai CRC", ST_OK),
@@ -272,7 +272,7 @@ def build():
         "ClearTrip và lệnh bật cùng một khung: cụm vừa thoát TRIPPED bỏ qua lệnh bật trong khung đó (cụm khác bật/tắt theo Mask).",
         "Trình tự bật: OFF -> ARMING (chờ SAFE_ARM_MS = 400 ms, tối thiểu 100 ms ở OFF) -> ON. Khi ON mới so ngưỡng và nạp ngưỡng dưới INA.",
         "Không có ACK: kiểm tra bằng 81 81: byte 238 (safe_state) và 255..258 (lệnh cuối = 0x01, kết quả 0/2, bộ đếm tăng).",
-        "Ghi cấu hình, ENTER_REC và nạp code chỉ khi MỌI cụm OFF.",
+        "ENTER_REC và nạp code chỉ khi MỌI cụm OFF. Ghi cấu hình nhận ở mọi trạng thái (hoãn nếu cần xóa sector mà còn cụm cấp nguồn).",
         "Mọi cụm trip chỉ cắt nguồn và giữ TRIPPED đến ClearTrip (không còn LOCKOUT).",
     ]
     for t in rules:
@@ -375,7 +375,7 @@ def build():
         r += 1
     r += 1
     for t in [
-        "Ghi cấu hình chỉ nhận khi MỌI cụm OFF (nếu không: bị từ chối, 81 81 byte 256 = 1).",
+        "Ghi cấu hình nhận ở mọi trạng thái. Ngưỡng phần mềm áp ngay; thanh ghi INA của cụm đang cấp nguồn nạp khi cụm về OFF. Hoãn (81 81 byte 256 = 4) nếu cần xóa sector Flash mà còn cụm cấp nguồn.",
         "Chưa lưu cấu hình thì 82 82 trả cấu hình mặc định (INA mặc định, còn lại 0). Ghi thất bại thì giữ cấu hình cũ (byte 256 = 3).",
         "82 82 trả bản trong RAM (nạp từ Flash khi khởi động, cập nhật sau mỗi lần ghi thành công); không đọc ngược thanh ghi từ IC.",
         "Mapping tạm thời: khối INA n ↔ INA n trên board bring-up. Bản đầy đủ: 4 INA228 nằm ở cụm Supply (rail 24 V, 5 V, 3,3 V, 3,3 V MCU).",
@@ -525,9 +525,10 @@ def build():
     r += 1
     r = table(["Giá trị", "Tên", "Ý nghĩa"], [
         (0, "OK", "Lệnh được chấp nhận"),
-        (1, "NOT_OFF", "Ghi cấu hình bị từ chối: còn cụm chưa OFF"),
+        (1, "(không dùng)", "Trước đây: ghi cấu hình bị từ chối vì còn cụm chưa OFF. Đã bỏ"),
         (2, "REFUSED", "Lệnh bật bị từ chối: cụm đang TRIPPED, hoặc vừa ClearTrip trong cùng khung"),
         (3, "FLASH_FAIL", "Ghi cấu hình vào Flash thất bại (giữ cấu hình cũ)"),
+        (4, "ERASE_DEFER", "Ghi cấu hình bị hoãn: cần xóa sector Flash (chặn CPU) mà còn cụm cấp nguồn. Cấu hình cũ giữ nguyên, gửi lại sau khi tắt cụm"),
     ], r)
 
     # ------------------------------------------------------------------ 8. Trip code

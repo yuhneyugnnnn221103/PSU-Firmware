@@ -2,6 +2,7 @@
 #include <ina228_cfg.h>
 #include "psu_cfg.h"
 #include "psu_trip.h"
+#include "psu_monitor.h"
 #include "cfg_store.h"
 
 static uint8_t s_blob[PSU_CFG_LEN];
@@ -69,6 +70,12 @@ bool PsuCfg_Store(const uint8_t *blob)
     s_dirty = true;
     apply_thresholds();
     return true;
+}
+
+uint8_t PsuCfg_Write(const uint8_t *blob, bool any_power_on)
+{
+    if (any_power_on && CfgStore_NeedsErase()) return PSU_RES_ERASE_DEFER;
+    return PsuCfg_Store(blob) ? PSU_RES_OK : PSU_RES_FLASH_FAIL;
 }
 
 bool PsuCfg_ConsumeDirty(void)

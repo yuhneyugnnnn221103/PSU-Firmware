@@ -37,7 +37,7 @@ Lỗi cố ý nên thử: `BEGIN` 21 byte kiểu cũ (không có ACK hợp lệ)
    `rx_frames` (+21) và `tx_sent` (+26) tăng theo từng lần hỏi; `rx_badcrc`, `rx_badaddr`, `tx_skipped`, `tx_error`, `tx_stuck` = 0; uptime (+39) tăng.
 2. Nhiệt độ/dòng của DCM1..3 đổi theo thực tế (INA nào chưa gắn → 00 và LED xanh 3 nháy).
 3. Ghi cấu hình `04 04` (915 byte) khi mọi cụm `OFF` rồi `03 03` đọc lại: khớp từng byte. Kiểm tra +17 = `04`, +18 = `0`, +19 tăng 1.
-4. Ghi cấu hình khi cụm 1 đang `ON`: bị từ chối (+18 = `1`), cấu hình cũ giữ nguyên.
+4. Ghi cấu hình khi cụm 1 đang `ON`: được nhận (+18 = `0`), `03 03` đọc lại khớp; ngưỡng phần mềm có hiệu lực ngay, thanh ghi INA của cụm 1 chưa đổi cho đến khi tắt cụm (về OFF thì INA nạp theo cấu hình mới). Cụm 1 không bị trip trong lúc ghi. Riêng khi bank đầy (khoảng mỗi 90 lần ghi) mà cụm đang bật: +18 = `4`, cấu hình cũ giữ nguyên; tắt cụm rồi ghi lại thì được.
 5. Reset PSU rồi `03 03`: cấu hình còn nguyên (lưu Flash).
 
 ## 4. Điều khiển (không tải)

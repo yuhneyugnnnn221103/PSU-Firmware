@@ -82,7 +82,7 @@ Test host: `make -C tests/host test` (`recovery_test`: giao thức + cắt đi�
 
 ## Ghi flash khi đầu ra đang bật
 Xoá sector chặn CPU (kể cả ISR trip). Việc nạp firmware giờ chỉ xảy ra trong recovery (không có đầu ra nào bật).
-Trong app, ghi cấu hình (`04 04`) và `ENTER_REC` chỉ nhận khi mọi cụm `OFF` (vì có thể kích hoạt xoá sector khi compaction).
+Trong app, `ENTER_REC` chỉ nhận khi mọi cụm `OFF`. Ghi cấu hình (`04 04`) nhận ở mọi trạng thái; riêng lần ghi cần xoá sector (compaction hoặc bank chưa khởi tạo) thì hoãn nếu còn cụm cấp nguồn (kết quả `4`), vì xoá sector chặn CPU kể cả ngắt trip.
 
 ## Máy trạng thái an toàn
 - Mỗi cụm DCM (3 DCM, 1 chân EN) có một máy trạng thái riêng `BOOT → OFF → ARMING → ON → TRIPPED`. **Không còn LOCKOUT**:

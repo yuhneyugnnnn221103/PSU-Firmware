@@ -33,9 +33,10 @@
 
 /* Ket qua lenh cuoi (dieu khien 01 01 / ghi cau hinh 04 04 khong co ACK) */
 #define PSU_RES_OK            0u
-#define PSU_RES_NOT_OFF       1u   /* ghi cau hinh bi tu choi: con cum chua OFF */
+#define PSU_RES_NOT_OFF       1u   /* KHONG CON DUNG (ghi cau hinh khong con doi cum OFF); giu so de khong doi bang ma */
 #define PSU_RES_REFUSED       2u   /* lenh bat bi tu choi: cum dang TRIPPED (hoac vua clear trong cung khung) */
 #define PSU_RES_FLASH_FAIL    3u   /* ghi cau hinh vao Flash that bai */
+#define PSU_RES_ERASE_DEFER   4u   /* ghi cau hinh can xoa sector Flash (chan CPU) ma con cum dang cap nguon: hoan, gui lai sau */
 
 #define PSU_PROTO_REV         1u
 #define PSU_DIAG_COUNT        9u

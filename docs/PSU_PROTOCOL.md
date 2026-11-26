@@ -54,7 +54,7 @@ và các **mở rộng / khác biệt** so với file đó. Code: `shared_lib/ps
 | +12 | slot firmware đang chạy (`A` = app) |
 | +13..+16 | 0 (dự phòng; trước đây là số version u32, **đã bỏ**: version là chuỗi, xem `99 99`) |
 | +17 | lệnh điều khiển/cấu hình gần nhất: `01` điều khiển, `04` ghi cấu hình, `00` chưa có lệnh nào |
-| +18 | kết quả lệnh đó: `0` OK, `1` ghi cấu hình bị từ chối (còn cụm chưa OFF), `2` lệnh bật bị từ chối (cụm đang TRIPPED, hoặc vừa ClearTrip trong cùng khung), `3` ghi Flash thất bại |
+| +18 | kết quả lệnh đó: `0` OK, `1` ghi cấu hình bị từ chối (còn cụm chưa OFF), `2` lệnh bật bị từ chối (cụm đang TRIPPED, hoặc vừa ClearTrip trong cùng khung), `3` ghi Flash thất bại, `4` ghi cấu hình bị hoãn (cần xoá sector Flash mà còn cụm cấp nguồn, gửi lại sau). Mã `1` không còn dùng |
 | +19..+20 | bộ đếm số lệnh đã ghi nhận ở +17 (u16 BE, tràn quay vòng) |
 | +21..+38 | 9 bộ đếm chẩn đoán truyền thông, mỗi cái u16 BE tràn quay vòng, theo thứ tự: `rx_frames` (khung hợp lệ), `rx_badcrc`, `rx_badaddr`, `rx_uart_err`, `rx_overrun`, `tx_sent`, `tx_skipped`, `tx_error`, `tx_stuck` (cộng gộp cả 3 cổng) |
 | +39..+42 | thời gian chạy kể từ lần reset gần nhất (giây, u32 BE) |
@@ -74,8 +74,8 @@ Lệnh bật bị từ chối (cụm đang TRIPPED hoặc đang nạp code) → 
 ## 5. Cấu hình `04 04` / `82 82`
 - Phần dữ liệu 904 byte (sau Mask 2 byte) được **lưu nguyên vào Flash** (cfg_store, nhiều bản ghi, chốt bằng CRC32): cụm DCM, INA, ngưỡng Supply, dự phòng.
   `82 82` trả đúng nội dung đã ghi (để PC đọc lại so sánh). Chưa lưu → trả cấu hình mặc định (INA mặc định, còn lại 0).
-- Mask `FF FF` coi như ghi đè toàn bộ. **Chỉ nhận khi mọi cụm OFF** (đổi `SHUNT_CAL` khi nguồn bật làm sai thang đo); ngoài ra bỏ qua im lặng.
-- **INA1..3**: 9 thanh ghi/INA nạp thẳng vào IC (khi ghi và khi khởi động). `SHUNT_CAL = 0` ⇒ dùng mặc định của INA đó (`ina228_cfg.h`); bit RST/RSTACC của CONFIG bị xoá.
+- Mask `FF FF` coi như ghi đè toàn bộ. **Ghi được ở mọi trạng thái, kể cả khi cụm đang cấp nguồn.** Ngưỡng phần mềm (36 byte đầu mỗi cụm) có hiệu lực ngay. Thanh ghi INA của cụm đang cấp nguồn (EN cao, kể cả ARMING) **chưa nạp** vì phải RESET IC (tắt ALERT, đổi thang đo); chúng được nạp khi cụm về OFF, đến lúc đó IC giữ cấu hình cũ. Ngoại lệ duy nhất: nếu lần ghi cần xoá sector Flash (bank đầy → nén, hoặc bank chưa khởi tạo) mà còn cụm cấp nguồn thì **hoãn** (kết quả `4`, cấu hình cũ giữ nguyên), vì xoá sector chặn CPU, kể cả ngắt trip, hàng trăm ms.
+- **INA1..3**: 9 thanh ghi/INA nạp thẳng vào IC (khi khởi động, và sau khi ghi nếu cụm đang OFF; nếu cụm đang cấp nguồn thì hoãn đến khi về OFF). `SHUNT_CAL = 0` ⇒ dùng mặc định của INA đó (`ina228_cfg.h`); bit RST/RSTACC của CONFIG bị xoá.
   Khối INA4 chỉ lưu và trả lại.
 - **Ngưỡng dưới của INA (`SUVL`, `BUVL`) chỉ được nạp khi cụm chứa INA đó ở SAFE_ON**; lúc OFF/ARMING IC giữ giá trị "tắt".
   Lý do (C3): điện áp bus thấp hơn `BUVL` khi nguồn tắt/đang lên là bình thường, nhưng chân ALERT (ALATCH=1) bị kéo xuống liên tục và

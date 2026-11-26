@@ -32,6 +32,12 @@ bool PsuCfg_IsStored(void);
  *  (cau hinh cu giu nguyen). Goi PsuCfg_ConsumeDirty() de biet can nap lai INA. */
 bool PsuCfg_Store(const uint8_t *blob);
 
+/** Xu ly lenh ghi cau hinh 04 04. Cho phep ghi MOI LUC (ca khi cum dang bat). Ngoai le duy nhat: neu lan ghi
+ *  can xoa sector Flash (bank day -> compaction, xoa chan CPU ca ngat trip) ma con cum cap nguon thi hoan,
+ *  khong ghi gi (cau hinh cu giu nguyen).
+ *  @return PSU_RES_OK, PSU_RES_FLASH_FAIL hoac PSU_RES_ERASE_DEFER (xem psu_monitor.h) */
+uint8_t PsuCfg_Write(const uint8_t *blob, bool any_power_on);
+
 /** true (1 lan) neu cau hinh vua doi -> can nap lai INA. */
 bool PsuCfg_ConsumeDirty(void);
 

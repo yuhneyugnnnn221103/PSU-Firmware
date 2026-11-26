@@ -27,6 +27,7 @@ static ina228_dev_t g_devs[INA228_CH_COUNT] = {
 static struct {
 	uint32_t t_dcm, t_scan, t_cfg_verify, t_confirm_try;
 	bool self_confirmed;
+	uint8_t ina_pending;     /* bit i = INA i con cho nap lai thanh ghi theo cau hinh moi */
 } g_app;
 
 static bool every(uint32_t *last, uint32_t now, uint32_t period)
@@ -45,6 +46,26 @@ static void load_ina_regs(bool reinit)
 		PsuCfg_InaRegs(i, r);
 		ina228_set_regs(&g_devs[i], r);
 		if (reinit) (void)ina228_dev_init(&g_devs[i]);
+	}
+}
+
+/* Nap thanh ghi moi + khoi tao lai (RESET) INA. Cum dang cap nguon (EN cao, ke ca ARMING) thi hoan: RESET INA
+ * tat ALERT/nguong trong luc khoi tao va doi thang do. Nguong phan mem (psu_trip) da ap ngay khi ghi cau hinh. */
+static void apply_pending_ina(void)
+{
+	if (g_app.ina_pending == 0u) return;
+
+	for (uint8_t i = 0; i < INA228_CH_COUNT; i++) {
+		if ((g_app.ina_pending & (1u << i)) == 0u) continue;
+
+		const uint8_t c = Safety_ClusterOfIna(i);
+		if (c != 0xFFu && Safety_PowerIsOn(c)) continue;      /* de den khi cum ve OFF */
+
+		uint16_t r[PSU_INA_REGS];
+		PsuCfg_InaRegs(i, r);
+		ina228_set_regs(&g_devs[i], r);
+		(void)ina228_dev_init(&g_devs[i]);
+		g_app.ina_pending &= (uint8_t)~(1u << i);
 	}
 }
 
@@ -138,10 +159,11 @@ void App_Loop(void)
 	if (ina228_bus_state() == INA228_BUS_IDLE) {
 		ina228_alert_process();
 
-		/* Cau hinh moi (04 04, chi nhan khi moi cum OFF): nap lai thanh ghi cho INA */
+		/* Cau hinh moi (04 04): nap lai thanh ghi cho INA. INA cua cum dang cap nguon doi den khi cum ve OFF. */
 		if (PsuCfg_ConsumeDirty()) {
-			load_ina_regs(true);
+			g_app.ina_pending = (uint8_t)((1u << INA228_CH_COUNT) - 1u);
 		}
+		apply_pending_ina();
 
 		/* Nguong DUOI cua INA (SUVL, BUVL) chi bat khi cum chua INA do dang SAFE_ON */
 		for (uint8_t i = 0; i < INA228_CH_COUNT; i++) {
